@@ -1,34 +1,33 @@
 # Daily Recommender
 
-> Chinese documentation: **[README.zh-CN.md](./README.zh-CN.md)**  
-> 如果你更习惯中文，请直接跳转到 **[中文版说明](./README.zh-CN.md)**。
+> English documentation: **[README.md](./README.md)**  
+> 如果你希望查看默认英文版，请跳转到 **[README.md](./README.md)**。
 
-A personal multi-source recommendation and briefing system.
+一个面向个人的多源信息推荐与简报系统。
 
-It pulls signals from GitHub, HuggingFace, X / Twitter, and other profile-driven sources, then uses your OpenAI-compatible LLM endpoint to:
+它会从 GitHub、HuggingFace、X / Twitter 等来源抓取内容，使用你配置的 OpenAI-compatible LLM 做筛选、摘要和排序，然后生成：
 
-- rank and summarize daily items
-- generate source-level digests
-- produce a cross-source narrative report
-- generate research ideas from the day’s signals
+- 单源日报
+- 跨平台连续阅读版报告
+- 基于当日信号的 research ideas
 
 ## What It Does
 
-This repository is useful in two modes:
+这个仓库适合两类使用方式：
 
-1. `Daily digest engine`
-   Generate daily digests from GitHub, HuggingFace, and X / Twitter, then send them by email.
+1. `个人日报引擎`
+   每天从多个平台抓取高信号内容，生成 source 级日报并发送邮件。
 
-2. `Personal intelligence workflow`
-   Monitor a specific circle, merge signals across sources, and output a readable report with interpretation, predictions, and ideas.
+2. `个人情报工作流`
+   根据 profile 监控特定圈层账号、合并多源信息、输出连续可读报告，并在后半部分给出判断、预测和想法。
 
 ## Supported Sources
 
 | Source | Data | Notes |
 | --- | --- | --- |
-| GitHub | Trending repositories | Good for open-source tools, frameworks, and engineering momentum |
-| HuggingFace | Daily papers + popular models | Good for research and model ecosystem tracking |
-| X / Twitter | Account timelines via RapidAPI | Supports static account pools and profile-driven discovery |
+| GitHub | Trending repositories | 适合追踪开源工具、框架、工程热点 |
+| HuggingFace | Daily papers + popular models | 适合追踪论文和模型生态 |
+| X / Twitter | Account timelines via RapidAPI | 支持静态账号池和 profile-driven discovery |
 
 ## Project Layout
 
@@ -51,7 +50,7 @@ daily-recommender/
 
 ## Quick Start
 
-### 1. Create the environment
+### 1. 创建环境
 
 ```bash
 python3 -m venv .venv
@@ -59,13 +58,13 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Create `.env`
+### 2. 创建 `.env`
 
 ```bash
 cp .env.example .env
 ```
 
-Minimum required LLM settings:
+最小必填的 LLM 配置是标准三件套：
 
 ```env
 PROVIDER=openai
@@ -75,7 +74,7 @@ API_KEY=your_api_key
 TEMPERATURE=0.5
 ```
 
-### 3. Run the default pipeline
+### 3. 跑默认流水线
 
 ```bash
 bash main_gpt.sh
@@ -83,11 +82,11 @@ bash main_gpt.sh
 
 ## Configuration Guide
 
-The project auto-loads `.env` from the repository root. Keep runtime settings there instead of hardcoding them in scripts.
+项目会自动读取仓库根目录下的 `.env`。推荐把运行配置都放在这里，而不是写死在脚本中。
 
 ### 1. LLM
 
-The preferred path is the standard trio:
+主路径是标准三件套：
 
 ```env
 PROVIDER=openai
@@ -97,17 +96,17 @@ API_KEY=your_api_key
 TEMPERATURE=0.5
 ```
 
-Notes:
+说明：
 
-- `PROVIDER` is usually `openai`
-- `BASE_URL` must point to an OpenAI-compatible endpoint
-- `MODEL_NAME` is the exact model string
-- `API_KEY` is your provider credential
-- legacy `LLM_*` variables are still accepted as fallbacks
+- `PROVIDER` 一般填 `openai`
+- `BASE_URL` 必须是 OpenAI-compatible endpoint
+- `MODEL_NAME` 直接填写模型名
+- `API_KEY` 是服务商密钥
+- 老的 `LLM_*` 变量仍兼容，但只是 fallback
 
 ### 2. Email
 
-If you want the main pipeline to actually send emails, SMTP is required:
+如果你要跑完整主流程并发邮件，SMTP 必填：
 
 ```env
 SMTP_SERVER=smtp.example.com
@@ -117,14 +116,14 @@ SMTP_RECEIVER=you@example.com
 SMTP_PASSWORD=your_smtp_password
 ```
 
-Notes:
+说明：
 
-- `SMTP_RECEIVER` supports multiple emails separated by commas
-- `465` uses SSL by default
+- `SMTP_RECEIVER` 支持多个邮箱，逗号分隔
+- `465` 默认走 SSL
 
 ### 3. X / Twitter
 
-X currently uses RapidAPI `twitter-api45`:
+X 当前通过 RapidAPI `twitter-api45` 获取数据：
 
 ```env
 X_RAPIDAPI_KEY=your_rapidapi_key
@@ -132,7 +131,7 @@ X_RAPIDAPI_HOST=twitter-api45.p.rapidapi.com
 X_ACCOUNTS_FILE=x_accounts.txt
 ```
 
-To enable profile-driven account discovery:
+如果想让系统根据 profile 自动发现监控账号，还可以打开：
 
 ```env
 X_DISCOVER_ACCOUNTS=1
@@ -162,7 +161,7 @@ GENERATE_IDEAS=0
 
 ## Common Commands
 
-### Run one source
+### 只跑一个 source
 
 ```bash
 .venv/bin/python main.py --sources github --save
@@ -170,13 +169,13 @@ GENERATE_IDEAS=0
 .venv/bin/python main.py --sources twitter --save
 ```
 
-### Run multiple sources
+### 同时跑多个 source
 
 ```bash
 .venv/bin/python main.py --sources github huggingface twitter --save
 ```
 
-### Generate a cross-source report
+### 生成跨平台连续阅读版报告
 
 ```bash
 .venv/bin/python main.py \
@@ -185,7 +184,7 @@ GENERATE_IDEAS=0
   --generate_report
 ```
 
-### Generate research ideas
+### 生成 research ideas
 
 ```bash
 .venv/bin/python main.py \
@@ -197,7 +196,7 @@ GENERATE_IDEAS=0
 
 ## Outputs
 
-All generated artifacts are written into `history/`:
+所有产物默认写入 `history/`：
 
 ```text
 history/
@@ -208,13 +207,13 @@ history/
 └── ideas/<date>/
 ```
 
-Typical per-source outputs:
+每个 source 通常包含：
 
-- `json/`: item-level caches
-- `<date>.md`: Markdown digest
-- `*_email.html`: HTML email rendering
+- `json/`：单条缓存
+- `<date>.md`：Markdown 日报
+- `*_email.html`：HTML 邮件版本
 
-Report directory:
+报告目录包含：
 
 - `report.json`
 - `report.md`
@@ -224,23 +223,23 @@ Report directory:
 
 ### `description.txt`
 
-A light interest profile used by source-level filtering and summarization.
+轻量兴趣描述，适合 source 级筛选和摘要。
 
 ### `researcher_profile.md`
 
-A richer profile better suited for `--generate_report` and `--generate_ideas`.
+更适合 `--generate_report` 和 `--generate_ideas` 的 richer profile。
 
 ### `x_accounts.txt`
 
-Static monitoring account pool.
+静态监控账号池。
 
 ### `x_accounts.discovered.txt`
 
-Persisted discovered account pool from profile-driven discovery. It is ignored by git by default.
+动态发现后落盘的扩展账号池。默认已加入 `.gitignore`，不会提交。
 
 ## Sanity Check
 
-If you only want to verify that the standard LLM trio works:
+如果你只想先验证标准 LLM 三件套是否通，可以直接跑：
 
 ```bash
 .venv/bin/python - <<'PY'
@@ -257,11 +256,11 @@ print(client.inference("Reply with exactly OK.", temperature=0))
 PY
 ```
 
-If the output is `OK` or `OK.`, the standard endpoint path is working.
+如果返回 `OK` 或 `OK.`，说明标准 endpoint 链路已经打通。
 
 ## Current Boundaries
 
-- The main pipeline sends email directly, so SMTP is required for full end-to-end runs
-- X depends on RapidAPI stability
-- GitHub / HuggingFace / Twitter digests are generated first, then optionally merged into a unified report
-- `codex_bridge` has been removed; the repository now uses only the standard model configuration path
+- 主流程会直接发邮件，所以没有 SMTP 配置时不适合直接跑完整 `main.py`
+- X 依赖 RapidAPI 的稳定性
+- GitHub / HuggingFace / Twitter 先生成 source 级日报，再可选合成为统一 report
+- 仓库已经移除了 `codex_bridge`，现在只保留标准模型配置链路
