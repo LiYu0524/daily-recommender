@@ -2,13 +2,6 @@ import argparse
 import os
 from config import LLMConfig, EmailConfig, CommonConfig
 from sources import SOURCE_REGISTRY
-from llm.codex_bridge import (
-    DEFAULT_BRIDGE_URL,
-    DEFAULT_ISSUER,
-    DEFAULT_API_BASE,
-    ensure_local_bridge,
-    stop_local_bridge,
-)
 
 
 def load_dotenv(path: str = ".env") -> None:
@@ -42,6 +35,14 @@ def env_str(name: str, default: str | None = None) -> str | None:
     return value
 
 
+def env_first(names: list[str] | tuple[str, ...], default: str | None = None) -> str | None:
+    for name in names:
+        value = env_str(name)
+        if value not in (None, ""):
+            return value
+    return default
+
+
 def env_int(name: str, default: int | None = None) -> int | None:
     value = os.getenv(name)
     if value in (None, ""):
@@ -58,6 +59,11 @@ def env_float(name: str, default: float | None = None) -> float | None:
 
 def main():
     load_dotenv()
+    provider_default = env_first(("PROVIDER", "LLM_PROVIDER"), "openai")
+    model_default = env_first(("MODEL_NAME", "LLM_MODEL"))
+    base_url_default = env_first(("BASE_URL", "LLM_BASE_URL"))
+    api_key_default = env_first(("API_KEY", "LLM_API_KEY"))
+    temperature_default = env_first(("TEMPERATURE", "LLM_TEMPERATURE"))
 
     parser = argparse.ArgumentParser(description="Unified Daily Recommender")
 
@@ -70,63 +76,28 @@ def main():
     # LLM config
     parser.add_argument(
         "--provider", type=str,
-        default=env_str("LLM_PROVIDER"),
-        required=env_str("LLM_PROVIDER") is None,
-        help="LLM provider (or set LLM_PROVIDER in .env)",
+        default=provider_default,
+        help="LLM provider (default: openai; also supports PROVIDER or LLM_PROVIDER in .env)",
     )
     parser.add_argument(
         "--model", type=str,
-        default=env_str("LLM_MODEL"),
-        required=env_str("LLM_MODEL") is None,
-        help="Model name (or set LLM_MODEL in .env)",
+        default=model_default,
+        required=model_default is None,
+        help="Model name (prefer MODEL_NAME in .env; LLM_MODEL is also supported)",
     )
     parser.add_argument(
-        "--base_url", type=str, default=env_str("LLM_BASE_URL"),
-        help="API base URL (or set LLM_BASE_URL in .env)",
+        "--base_url", type=str, default=base_url_default,
+        help="API base URL (prefer BASE_URL in .env; LLM_BASE_URL is also supported)",
     )
     parser.add_argument(
-        "--api_key", type=str, default=env_str("LLM_API_KEY"),
-        help="API key (or set LLM_API_KEY in .env)",
+        "--api_key", type=str, default=api_key_default,
+        help="API key (prefer API_KEY in .env; LLM_API_KEY is also supported)",
     )
     parser.add_argument(
-        "--auth_mode",
-        type=str,
-        choices=("api_key", "codex_bridge"),
-        default=env_str("LLM_AUTH_MODE", "api_key"),
-        help="LLM auth mode: direct API key or local Codex auth bridge",
-    )
-    parser.add_argument(
-        "--codex_auth_file",
-        type=str,
-        default=env_str("CODEX_AUTH_FILE", os.path.expanduser("~/.codex/auth.json")),
-        help="Path to Codex auth.json for codex_bridge mode",
-    )
-    parser.add_argument(
-        "--codex_bridge_url",
-        type=str,
-        default=env_str("CODEX_BRIDGE_URL", DEFAULT_BRIDGE_URL),
-        help="Local Codex bridge base URL",
-    )
-    parser.add_argument(
-        "--codex_bridge_issuer",
-        type=str,
-        default=env_str("CODEX_BRIDGE_ISSUER", DEFAULT_ISSUER),
-        help="OAuth issuer used by the Codex bridge",
-    )
-    parser.add_argument(
-        "--codex_api_base",
-        type=str,
-        default=env_str("CODEX_API_BASE", DEFAULT_API_BASE),
-        help="Upstream OpenAI API base used by the Codex bridge",
-    )
-    parser.add_argument(
-        "--codex_bridge_start_timeout",
+        "--temperature",
         type=float,
-        default=env_float("CODEX_BRIDGE_START_TIMEOUT", 15.0),
-        help="Seconds to wait for the local Codex bridge to become healthy",
-    )
-    parser.add_argument(
-        "--temperature", type=float, default=env_float("LLM_TEMPERATURE", 0.7), help="Temperature"
+        default=float(temperature_default) if temperature_default not in (None, "") else 0.7,
+        help="Temperature (supports TEMPERATURE or LLM_TEMPERATURE in .env)",
     )
 
     # Email config
@@ -223,18 +194,11 @@ def main():
     if args.report_profile and not os.path.exists(args.report_profile):
         raise FileNotFoundError(f"Report profile not found: {args.report_profile}")
     provider = args.provider.lower()
-    auth_mode = args.auth_mode.lower()
     resolved_base_url = args.base_url
     resolved_api_key = args.api_key
     if provider != "ollama":
-        if auth_mode == "codex_bridge":
-            if provider != "openai":
-                raise ValueError("codex_bridge is only supported with provider=openai")
-            resolved_base_url = args.codex_bridge_url
-            resolved_api_key = resolved_api_key or "codex-bridge"
-        else:
-            assert resolved_base_url, "base_url is required for OpenAI/SiliconFlow"
-            assert resolved_api_key, "api_key is required for OpenAI/SiliconFlow"
+        assert resolved_base_url, "base_url is required for OpenAI/SiliconFlow"
+        assert resolved_api_key, "api_key is required for OpenAI/SiliconFlow"
 
     # Load description
     with open(args.description, "r", encoding="utf-8") as f:
@@ -247,11 +211,6 @@ def main():
         base_url=resolved_base_url,
         api_key=resolved_api_key,
         temperature=args.temperature,
-        auth_mode=auth_mode,
-        codex_auth_file=args.codex_auth_file,
-        codex_bridge_issuer=args.codex_bridge_issuer,
-        codex_api_base=args.codex_api_base,
-        codex_bridge_start_timeout=args.codex_bridge_start_timeout,
     )
     email_config = EmailConfig(
         smtp_server=args.smtp_server,
@@ -267,110 +226,96 @@ def main():
         save_dir=args.save_dir,
     )
 
-    # Test LLM availability once
-    bridge_process = None
+    print("Testing LLM availability...")
+    if llm_config.provider.lower() == "ollama":
+        from llm.Ollama import Ollama
+        test_model = Ollama(llm_config.model)
+    else:
+        from llm.GPT import GPT
+        test_model = GPT(llm_config.model, llm_config.base_url, llm_config.api_key)
     try:
-        if llm_config.auth_mode == "codex_bridge":
-            bridge_process = ensure_local_bridge(
-                bridge_url=llm_config.base_url,
-                auth_file=llm_config.codex_auth_file or os.path.expanduser("~/.codex/auth.json"),
-                issuer=llm_config.codex_bridge_issuer,
-                api_base=llm_config.codex_api_base,
-                startup_timeout=llm_config.codex_bridge_start_timeout,
-            )
+        test_model.inference("Hello, who are you?")
+        print("LLM is available.")
+    except Exception as e:
+        print(f"LLM test failed: {e}")
+        raise RuntimeError("LLM not available, aborting.")
 
-        print("Testing LLM availability...")
-        if llm_config.provider.lower() == "ollama":
-            from llm.Ollama import Ollama
-            test_model = Ollama(llm_config.model)
+    # Run each source
+    all_recs = {}
+    for source_name in args.sources:
+        print(f"\n{'='*60}")
+        print(f"Running source: {source_name}")
+        print(f"{'='*60}")
+
+        source_cls = SOURCE_REGISTRY[source_name]
+        source_args = source_cls.extract_args(args)
+
+        source = source_cls(source_args, llm_config, common_config)
+        recs = source.send_email(email_config)
+        all_recs[source_name] = recs or []
+
+    if args.generate_report:
+        print(f"\n{'='*60}")
+        print("Generating cross-source report...")
+        print(f"{'='*60}")
+
+        from report_generator import ReportGenerator
+
+        report_profile_path = args.report_profile
+        if not report_profile_path:
+            if os.path.exists(args.researcher_profile):
+                report_profile_path = args.researcher_profile
+            else:
+                report_profile_path = args.description
+
+        with open(report_profile_path, "r", encoding="utf-8") as f:
+            report_profile_text = f.read()
+
+        generator = ReportGenerator(
+            all_recs=all_recs,
+            profile_text=report_profile_text,
+            llm_config=llm_config,
+            common_config=common_config,
+            report_title=args.report_title,
+            min_score=args.report_min_score,
+            max_items=args.report_max_items,
+            theme_count=args.report_theme_count,
+            prediction_count=args.report_prediction_count,
+            idea_count=args.report_idea_count,
+        )
+        report = generator.generate()
+        if report:
+            generator.save(report)
+            generator.render_email(report)
+            if args.send_report_email:
+                generator.send_email(report, email_config)
         else:
-            from llm.GPT import GPT
-            test_model = GPT(llm_config.model, llm_config.base_url, llm_config.api_key)
-        try:
-            test_model.inference("Hello, who are you?")
-            print("LLM is available.")
-        except Exception as e:
-            print(f"LLM test failed: {e}")
-            raise RuntimeError("LLM not available, aborting.")
+            print("No cross-source report generated.")
 
-        # Run each source
-        all_recs = {}
-        for source_name in args.sources:
-            print(f"\n{'='*60}")
-            print(f"Running source: {source_name}")
-            print(f"{'='*60}")
+    if args.generate_ideas:
+        print(f"\n{'='*60}")
+        print("Generating research ideas...")
+        print(f"{'='*60}")
 
-            source_cls = SOURCE_REGISTRY[source_name]
-            source_args = source_cls.extract_args(args)
+        from idea_generator import IdeaGenerator
 
-            source = source_cls(source_args, llm_config, common_config)
-            recs = source.send_email(email_config)
-            all_recs[source_name] = recs or []
+        generator = IdeaGenerator(
+            all_recs=all_recs,
+            profile_path=args.researcher_profile,
+            llm_config=llm_config,
+            common_config=common_config,
+            min_score=args.idea_min_score,
+            max_items=args.idea_max_items,
+            idea_count=args.idea_count,
+        )
+        ideas = generator.generate()
+        if ideas:
+            generator.save(ideas)
+            generator.send_email(ideas, email_config)
+        else:
+            print("No ideas generated.")
 
-        if args.generate_report:
-            print(f"\n{'='*60}")
-            print("Generating cross-source report...")
-            print(f"{'='*60}")
-
-            from report_generator import ReportGenerator
-
-            report_profile_path = args.report_profile
-            if not report_profile_path:
-                if os.path.exists(args.researcher_profile):
-                    report_profile_path = args.researcher_profile
-                else:
-                    report_profile_path = args.description
-
-            with open(report_profile_path, "r", encoding="utf-8") as f:
-                report_profile_text = f.read()
-
-            generator = ReportGenerator(
-                all_recs=all_recs,
-                profile_text=report_profile_text,
-                llm_config=llm_config,
-                common_config=common_config,
-                report_title=args.report_title,
-                min_score=args.report_min_score,
-                max_items=args.report_max_items,
-                theme_count=args.report_theme_count,
-                prediction_count=args.report_prediction_count,
-                idea_count=args.report_idea_count,
-            )
-            report = generator.generate()
-            if report:
-                generator.save(report)
-                generator.render_email(report)
-                if args.send_report_email:
-                    generator.send_email(report, email_config)
-            else:
-                print("No cross-source report generated.")
-
-        if args.generate_ideas:
-            print(f"\n{'='*60}")
-            print("Generating research ideas...")
-            print(f"{'='*60}")
-
-            from idea_generator import IdeaGenerator
-
-            generator = IdeaGenerator(
-                all_recs=all_recs,
-                profile_path=args.researcher_profile,
-                llm_config=llm_config,
-                common_config=common_config,
-                min_score=args.idea_min_score,
-                max_items=args.idea_max_items,
-                idea_count=args.idea_count,
-            )
-            ideas = generator.generate()
-            if ideas:
-                generator.save(ideas)
-                generator.send_email(ideas, email_config)
-            else:
-                print("No ideas generated.")
-
-        print(f"\nAll sources completed: {args.sources}")
-    finally:
-        stop_local_bridge(bridge_process)
+    print(f"\nAll sources completed: {args.sources}")
 
 
 if __name__ == "__main__":

@@ -30,7 +30,7 @@ fi
   --sources "${SOURCES[@]}" \
   --description "${DESCRIPTION_FILE:-description.txt}" \
   --num_workers "${NUM_WORKERS:-8}" \
-  --temperature "${LLM_TEMPERATURE:-0.5}" \
+  --temperature "${TEMPERATURE:-${LLM_TEMPERATURE:-0.5}}" \
   --save \
   --gh_languages "${GH_LANGUAGES[@]}" \
   --gh_since "${GH_SINCE:-daily}" \

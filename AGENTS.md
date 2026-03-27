@@ -52,9 +52,9 @@ This command completed successfully after the environment was created and depend
 
 ## Run Prerequisites
 
-- Full project runs still require valid LLM settings: `--provider` and `--model`.
-- For non-`ollama` providers you can use either direct API auth (`LLM_AUTH_MODE=api_key` with `LLM_BASE_URL` + `LLM_API_KEY`) or Codex auth (`LLM_AUTH_MODE=codex_bridge` with `CODEX_AUTH_FILE` pointing at a valid `auth.json`).
-- `codex_bridge` mode prefers OpenAI Platform token exchange when available and otherwise falls back to the local `codex` CLI, so `codex` must be installed and logged in on the machine for that path to work.
+- Full project runs primarily use the standard LLM trio in `.env`: `MODEL_NAME`, `BASE_URL`, and `API_KEY`.
+- `PROVIDER` defaults to `openai`-compatible usage.
+- Legacy `LLM_*` variables are still accepted as fallbacks for compatibility, but they are no longer the primary path.
 - Full project runs also require SMTP settings because the current main flow sends email directly.
 - Source fetching and LLM evaluation require network access to external services.
 - The current Twitter/X integration uses RapidAPI (`twitter-api45`) rather than direct X API or Nitter.
@@ -65,4 +65,4 @@ This command completed successfully after the environment was created and depend
 
 - `main_gpt.sh` is now repo-relative and reads runtime settings from `.env` instead of embedding credentials directly.
 - `main.py` now auto-loads `.env` from the project root. Twitter/X RapidAPI credentials can be supplied there via `X_RAPIDAPI_KEY` and `X_RAPIDAPI_HOST`.
-- `main.py` also supports `LLM_AUTH_MODE=codex_bridge`, `CODEX_AUTH_FILE`, `CODEX_BRIDGE_URL`, `CODEX_BRIDGE_ISSUER`, and `CODEX_API_BASE` for local Codex-auth-backed LLM calls.
+- `main.py` now prefers `MODEL_NAME`, `BASE_URL`, `API_KEY`, `PROVIDER`, and `TEMPERATURE`; legacy `LLM_*` variables remain supported as fallbacks.

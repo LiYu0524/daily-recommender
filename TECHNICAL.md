@@ -26,7 +26,6 @@ daily-recommender/
     __init__.py
     GPT.py                         # OpenAI-compatible API
     Ollama.py                      # Ollama local model
-    codex_bridge.py               # Local bridge for Codex ChatGPT auth -> OpenAI-compatible API
   fetchers/
     __init__.py
     github_fetcher.py              # GitHub Trending scraper
@@ -56,17 +55,7 @@ Dependencies: tqdm, loguru, requests, beautifulsoup4, openai, ollama (optional)
 
 ### Configuration
 
-`main.py` and `main_gpt.sh` will auto-load `.env` from the project root. Put `LLM_*`, `SMTP_*`, and `X_RAPIDAPI_*` there if you don't want to pass them on the CLI. Edit `description.txt` with your interest areas.
-
-### LLM Authentication Modes
-
-This repo now supports two OpenAI-compatible auth paths:
-
-- `LLM_AUTH_MODE=api_key`: the original mode using `LLM_BASE_URL` + `LLM_API_KEY`
-- `LLM_AUTH_MODE=codex_bridge`: starts a local bridge that reads `~/.codex/auth.json`. It prefers standard OpenAI API key exchange when the Codex auth state includes Platform org/project claims, and otherwise falls back to running `codex exec` locally behind an OpenAI-compatible `/v1/chat/completions` bridge.
-
-In `codex_bridge` mode, `LLM_BASE_URL` is optional. If unset, the repo uses `CODEX_BRIDGE_URL` (default `http://127.0.0.1:8765/v1`).
-The CLI fallback requires a local `codex` binary on `PATH` and a valid Codex/ChatGPT login state.
+`main.py` and `main_gpt.sh` will auto-load `.env` from the project root. Put `MODEL_NAME`, `BASE_URL`, `API_KEY`, `SMTP_*`, and `X_RAPIDAPI_*` there if you don't want to pass them on the CLI. Legacy `LLM_*` variables are still accepted as fallbacks for compatibility. Edit `description.txt` with your interest areas.
 
 ### Run
 
@@ -121,9 +110,8 @@ python main.py --sources twitter [args...]     # Twitter/X only
 
 ```
 1. main.py parses CLI args
-2. Optionally starts the local Codex bridge when `LLM_AUTH_MODE=codex_bridge`
-3. Tests LLM availability once
-4. For each source in --sources:
+2. Tests LLM availability once
+3. For each source in --sources:
    a. Source.__init__: init LLM + fetch raw data from source
    b. get_recommendations():
       - fetch_items()             -> raw item list
@@ -226,16 +214,10 @@ Then users can use `--sources xxx`.
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | --sources | Source list | required |
-| --provider | LLM provider | required |
+| --provider | LLM provider | openai |
 | --model | Model name | required |
-| --auth_mode | `api_key` or `codex_bridge` | api_key |
 | --base_url | API URL | None |
 | --api_key | API key | None |
-| --codex_auth_file | Path to `auth.json` for Codex bridge | `~/.codex/auth.json` |
-| --codex_bridge_url | Local bridge URL | `http://127.0.0.1:8765/v1` |
-| --codex_bridge_issuer | OAuth issuer for bridge | `https://auth.openai.com` |
-| --codex_api_base | Upstream OpenAI API base for bridge | `https://api.openai.com/v1` |
-| --codex_bridge_start_timeout | Seconds to wait for bridge health | 15 |
 | --temperature | LLM temperature | 0.7 |
 | --smtp_server | SMTP server | - |
 | --smtp_port | SMTP port | - |
