@@ -94,6 +94,17 @@
       font-size: 12px;
       line-height: 1.6;
     }
+    .log-view div {
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding: 1px 0;
+    }
+    .log-view div:last-child {
+      border-bottom: none;
+    }
+    .result-card-enter {
+      animation: rise 0.4s ease-out both;
+    }
+    .prose-render a:hover { text-decoration: underline; }
   </style>
 </head>
 <body class="font-sans text-slate-700">
@@ -149,8 +160,8 @@
           <span class="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-1.5 text-xs font-bold uppercase tracking-[0.24em] text-sea">
             Daily Trend Delivery
           </span>
-          <h2 class="mt-5 max-w-3xl text-4xl font-extrabold leading-tight text-ink md:text-6xl">
-            把今天值得看的 GitHub / HuggingFace / X 直接发到邮箱。
+          <h2 class="mt-5 max-w-2xl text-3xl font-extrabold leading-tight text-ink md:text-5xl">
+            把今天的 GitHub / HuggingFace / X 趋势，整理成一封邮件。
           </h2>
           <p class="mt-5 max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
             默认进入快速版，选择数据源并输入邮箱即可发送一封汇总 Daily Trend。
@@ -319,8 +330,11 @@
     </section>
   </main>
 
-  <div id="toast" class="pointer-events-none fixed bottom-5 right-5 z-50 hidden">
-    <div id="toast-card" class="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-panel"></div>
+  <div id="toast" class="pointer-events-none fixed bottom-5 right-5 z-50 hidden transition-all duration-300 translate-y-3 opacity-0">
+    <div id="toast-card" class="flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-sm font-semibold shadow-panel">
+      <span id="toast-icon"></span>
+      <span id="toast-text"></span>
+    </div>
   </div>
 
   <script>
@@ -534,7 +548,11 @@
       const log = document.getElementById('run-log');
       const line = document.createElement('div');
       line.textContent = message;
-      line.className = 'border-b border-white/10 py-1 last:border-b-0';
+      const lower = message.toLowerCase();
+      const isError = lower.includes('error') || lower.includes('fail') || lower.includes('traceback');
+      const isWarn = lower.includes('warn') || lower.includes('skip') || lower.includes('retry');
+      const isOk = lower.includes('done') || lower.includes('success') || lower.includes('complete') || lower.includes('saved');
+      line.style.color = isError ? '#f87171' : isWarn ? '#fbbf24' : isOk ? '#34d399' : '';
       log.appendChild(line);
       log.scrollTop = log.scrollHeight;
     }
@@ -581,8 +599,8 @@
         return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
       });
 
-      content.innerHTML = sortedEntries.map(([source, items]) => `
-        <div class="rounded-3xl border border-slate-200 bg-white p-4 shadow-soft">
+      content.innerHTML = sortedEntries.map(([source, items], idx) => `
+        <div class="result-card-enter rounded-3xl border border-slate-200 bg-white p-4 shadow-soft" style="animation-delay:${idx * 0.1}s">
           <div class="flex items-center justify-between gap-4">
             <div>
               <p class="text-xs font-bold uppercase tracking-[0.22em] text-slate-400">${date}</p>
@@ -622,18 +640,22 @@
         return `
           <details class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
             <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-ink">
-              ${escapeHtml(file.name)} (${file.items.length})
+              ${escapeHtml(file.name)} <span class="ml-1 text-xs font-normal text-slate-400">(${file.items.length})</span>
             </summary>
             <div class="divide-y divide-slate-200 bg-white">
               ${file.items.map((item, index) => `
-                <div class="px-4 py-3">
-                  <div class="flex items-center gap-2 text-sm font-semibold text-ink">
-                    <span class="text-xs text-slate-400">#${index + 1}</span>
-                    <span>${escapeHtml(item.title || 'Untitled')}</span>
-                    ${item.score ? `<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700">${escapeHtml(String(item.score))} 分</span>` : ''}
+                <div class="px-4 py-3 transition hover:bg-slate-50">
+                  <div class="flex items-center gap-2 text-sm">
+                    <span class="inline-flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-400">${index + 1}</span>
+                    <span class="font-semibold text-ink">${escapeHtml(item.title || 'Untitled')}</span>
+                    ${item.score ? `<span class="rounded-full px-2 py-0.5 text-[11px] font-bold ${Number(item.score) >= 7 ? 'bg-emerald-50 text-emerald-700' : Number(item.score) >= 4 ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}">${escapeHtml(String(item.score))} 分</span>` : ''}
                   </div>
                   ${item.summary || item.description ? `<p class="mt-2 text-sm leading-7 text-slate-600">${escapeHtml(item.summary || item.description || '')}</p>` : ''}
-                  ${item.url ? `<a href="${item.url}" target="_blank" rel="noreferrer" class="mt-2 inline-flex text-xs font-semibold text-sea hover:underline">查看原始链接</a>` : ''}
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    ${item.url ? `<a href="${item.url}" target="_blank" rel="noreferrer" class="inline-flex text-xs font-semibold text-sea hover:underline">查看原始链接</a>` : ''}
+                    ${item.language ? `<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">${escapeHtml(item.language)}</span>` : ''}
+                    ${item.stars ? `<span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">&#9734; ${escapeHtml(String(item.stars))}</span>` : ''}
+                  </div>
                 </div>
               `).join('')}
             </div>
@@ -641,12 +663,54 @@
         `;
       }
 
+      // Markdown files: render as formatted HTML instead of raw <pre>
+      const isMarkdown = file.name && (file.name.endsWith('.md') || file.type === 'markdown');
       return `
         <details class="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50" ${file.source === 'reports' ? 'open' : ''}>
           <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-ink">${escapeHtml(file.name)}</summary>
-          <pre class="max-h-96 overflow-auto whitespace-pre-wrap border-t border-slate-200 bg-white px-4 py-4 text-xs leading-6 text-slate-700">${escapeHtml(file.content || '')}</pre>
+          ${isMarkdown
+            ? `<div class="max-h-[32rem] overflow-auto border-t border-slate-200 bg-white px-5 py-4 text-sm leading-7 text-slate-700 prose-render">${renderMarkdown(file.content || '')}</div>`
+            : `<pre class="max-h-96 overflow-auto whitespace-pre-wrap border-t border-slate-200 bg-white px-4 py-4 text-xs leading-6 text-slate-700">${escapeHtml(file.content || '')}</pre>`
+          }
         </details>
       `;
+    }
+
+    function renderMarkdown(text) {
+      const lines = text.split('\n');
+      let html = '';
+      let inList = false;
+
+      for (let line of lines) {
+        const trimmed = line.trim();
+        if (inList && !trimmed.startsWith('- ') && !trimmed.startsWith('* ')) { html += '</ul>'; inList = false; }
+
+        if (trimmed.startsWith('### ')) {
+          html += `<h3 style="font-size:1.1rem;font-weight:600;margin:1rem 0 0.5rem">${mdInline(trimmed.slice(4))}</h3>`;
+        } else if (trimmed.startsWith('## ')) {
+          html += `<h2 style="font-size:1.25rem;font-weight:600;margin:1.25rem 0 0.6rem">${mdInline(trimmed.slice(3))}</h2>`;
+        } else if (trimmed.startsWith('# ')) {
+          html += `<h1 style="font-size:1.5rem;font-weight:700;margin:1.5rem 0 0.75rem">${mdInline(trimmed.slice(2))}</h1>`;
+        } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          if (!inList) { html += '<ul style="list-style:disc;padding-left:1.5rem;margin:0.5rem 0">'; inList = true; }
+          html += `<li style="margin-bottom:0.25rem">${mdInline(trimmed.slice(2))}</li>`;
+        } else if (trimmed === '') {
+          html += '<div style="height:0.4rem"></div>';
+        } else {
+          html += `<p style="margin-bottom:0.5rem">${mdInline(trimmed)}</p>`;
+        }
+      }
+      if (inList) html += '</ul>';
+      return html;
+
+      function mdInline(s) {
+        return s
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/`([^`]+)`/g, '<code style="background:#f1f5f9;padding:0.1rem 0.35rem;border-radius:0.25rem;font-size:0.85em">$1</code>')
+          .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer" style="color:#0f766e;text-decoration:none">$1</a>');
+      }
     }
 
     function closeResults() {
@@ -673,16 +737,33 @@
     function showToast(message, type = 'success') {
       const toast = document.getElementById('toast');
       const card = document.getElementById('toast-card');
-      const colors = {
-        success: 'border-emerald-200 text-emerald-800',
-        warning: 'border-amber-200 text-amber-800',
-        error: 'border-rose-200 text-rose-800'
+      const iconEl = document.getElementById('toast-icon');
+      const textEl = document.getElementById('toast-text');
+
+      const styles = {
+        success: { border: 'border-emerald-200', text: 'text-emerald-800', icon: '<svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' },
+        warning: { border: 'border-amber-200', text: 'text-amber-800', icon: '<svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>' },
+        error: { border: 'border-rose-200', text: 'text-rose-800', icon: '<svg class="w-4 h-4 text-rose-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' }
       };
-      card.className = `rounded-2xl border bg-white px-4 py-3 text-sm font-semibold shadow-panel ${colors[type] || colors.success}`;
-      card.textContent = message;
+      const s = styles[type] || styles.success;
+
+      card.className = `flex items-center gap-3 rounded-2xl border bg-white px-4 py-3 text-sm font-semibold shadow-panel ${s.border}`;
+      iconEl.innerHTML = s.icon;
+      textEl.className = s.text;
+      textEl.textContent = message;
+
       toast.classList.remove('hidden');
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-3', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+      });
+
       clearTimeout(showToast.timer);
-      showToast.timer = setTimeout(() => toast.classList.add('hidden'), 2800);
+      showToast.timer = setTimeout(() => {
+        toast.classList.add('translate-y-3', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        setTimeout(() => toast.classList.add('hidden'), 300);
+      }, 2800);
     }
   </script>
 </body>

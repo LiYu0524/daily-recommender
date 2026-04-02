@@ -72,6 +72,10 @@
     .source-card.selected {
       border-color: #10b981;
       background: rgba(236, 253, 245, 0.8);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1), 0 8px 24px rgba(16, 185, 129, 0.08);
+    }
+    .source-card.selected .checkbox-custom {
+      accent-color: #10b981;
     }
     .checkbox-custom:checked {
       background-color: #10b981;
@@ -89,18 +93,29 @@
       border-bottom-color: #059669;
     }
     .log-container {
-      max-height: 300px;
+      max-height: 340px;
       overflow-y: auto;
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
       font-size: 12px;
-      line-height: 1.5;
+      line-height: 1.6;
+      background: #0f172a;
+      color: #cbd5e1;
+      border-radius: 0.75rem;
+      padding: 0.75rem;
     }
     .log-line {
       padding: 2px 0;
-      border-bottom: 1px solid rgba(0,0,0,0.05);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
     }
     .log-line:last-child {
       border-bottom: none;
+    }
+    .history-card {
+      transition: all 0.2s ease;
+    }
+    .history-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 28px rgba(92,136,112,0.1);
     }
     .prose h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5rem 0 1rem; }
     .prose h2 { font-size: 1.25rem; font-weight: 600; margin: 1.25rem 0 0.75rem; }
@@ -284,13 +299,16 @@
         <div class="glass-card rounded-2xl p-6 border border-emerald-200/80 shadow-card">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-3">
-              <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse-dot"></div>
-              <h3 class="font-semibold text-slate-800">正在运行</h3>
+              <div id="run-dot" class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse-dot"></div>
+              <h3 id="run-title" class="font-semibold text-slate-800">正在运行</h3>
             </div>
             <div class="flex items-center gap-2">
               <span class="text-sm text-slate-500" id="run-status-text">初始化...</span>
-              <button onclick="cancelRun()" class="text-xs px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
+              <button id="btn-cancel-run" onclick="cancelRun()" class="text-xs px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
                 取消
+              </button>
+              <button id="btn-close-run" onclick="document.getElementById('run-panel').classList.add('hidden')" class="hidden text-xs px-3 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
+                关闭
               </button>
             </div>
           </div>
@@ -546,13 +564,9 @@ I'm not interested in:
   </main>
 
   <!-- Toast Notification -->
-  <div id="toast" class="fixed bottom-4 right-4 z-50 hidden">
-    <div class="glass-card rounded-xl px-4 py-3 border border-emerald-200/80 shadow-lg flex items-center gap-3">
-      <div class="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center">
-        <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-        </svg>
-      </div>
+  <div id="toast" class="fixed bottom-4 right-4 z-50 hidden transition-all duration-300 translate-y-2 opacity-0">
+    <div id="toast-card" class="glass-card rounded-xl px-4 py-3 border shadow-lg flex items-center gap-3">
+      <div id="toast-icon" class="w-6 h-6 rounded-full flex items-center justify-center"></div>
       <span id="toast-message" class="text-sm font-medium text-slate-700">操作成功</span>
     </div>
   </div>
@@ -737,6 +751,13 @@ I'm not interested in:
       statusText.textContent = '连接中...';
       log.innerHTML = '';
 
+      // Reset run panel header to active state
+      const dot = document.getElementById('run-dot');
+      dot.className = 'w-3 h-3 rounded-full bg-emerald-500 animate-pulse-dot';
+      document.getElementById('run-title').textContent = '正在运行';
+      document.getElementById('btn-cancel-run').classList.remove('hidden');
+      document.getElementById('btn-close-run').classList.add('hidden');
+
       // Disable buttons
       document.querySelectorAll('button[id^="btn-"]').forEach(btn => btn.disabled = true);
 
@@ -755,7 +776,11 @@ I'm not interested in:
           statusText.textContent = '运行中...';
         } else if (data.type === 'log') {
           const line = document.createElement('div');
-          line.className = 'log-line';
+          const lower = data.message.toLowerCase();
+          const isError = lower.includes('error') || lower.includes('fail') || lower.includes('traceback');
+          const isWarn = lower.includes('warn') || lower.includes('skip') || lower.includes('retry');
+          const isSuccess = lower.includes('done') || lower.includes('success') || lower.includes('complete') || lower.includes('saved');
+          line.className = `log-line ${isError ? 'text-red-400' : isWarn ? 'text-amber-400' : isSuccess ? 'text-emerald-400' : ''}`;
           line.textContent = data.message;
           log.appendChild(line);
           log.scrollTop = log.scrollHeight;
@@ -771,6 +796,15 @@ I'm not interested in:
           progressBar.style.width = '100%';
           statusText.textContent = data.success ? '完成' : '失败';
           showToast(data.success ? '运行完成' : '运行失败', data.success ? 'success' : 'error');
+
+          // Update run panel to show finished state
+          const dot = document.getElementById('run-dot');
+          const title = document.getElementById('run-title');
+          dot.classList.remove('animate-pulse-dot');
+          dot.className = `w-3 h-3 rounded-full ${data.success ? 'bg-emerald-500' : 'bg-red-400'}`;
+          title.textContent = data.success ? '运行完成' : '运行失败';
+          document.getElementById('btn-cancel-run').classList.add('hidden');
+          document.getElementById('btn-close-run').classList.remove('hidden');
 
           if (data.success && data.files) {
             displayRunResults(data.files, data.date);
@@ -804,9 +838,7 @@ I'm not interested in:
         state.ws = null;
       }
       document.querySelectorAll('button[id^="btn-"]').forEach(btn => btn.disabled = false);
-      setTimeout(() => {
-        document.getElementById('run-panel').classList.add('hidden');
-      }, 2000);
+      // Keep the run panel visible so user can review logs - they can dismiss it manually
     }
 
     function cancelRun() {
@@ -894,21 +926,24 @@ I'm not interested in:
       }
 
       container.innerHTML = filtered.map(item => `
-        <div class="glass-card rounded-xl p-5 border border-slate-200/80 hover:shadow-glow transition cursor-pointer"
+        <div class="history-card glass-card rounded-2xl p-5 border border-slate-200/80 cursor-pointer"
              onclick="viewResult('${item.type}', '${item.date}')">
           <div class="flex items-start justify-between">
             <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-lg ${getTypeColor(item.type)} flex items-center justify-center text-white font-medium text-sm">
+              <div class="w-10 h-10 rounded-xl ${getTypeColor(item.type)} flex items-center justify-center text-white font-bold text-xs tracking-wider">
                 ${getTypeIcon(item.type)}
               </div>
               <div>
                 <h4 class="font-semibold text-slate-800">${getTypeLabel(item.type)}</h4>
-                <p class="text-xs text-slate-500">${item.date} · ${item.sources?.join(', ') || 'N/A'}</p>
+                <p class="text-xs text-slate-500 mt-0.5">${item.date}</p>
               </div>
             </div>
-            <span class="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600">
-              ${item.items || '-'} 项
-            </span>
+            <div class="flex items-center gap-2">
+              ${(item.sources || []).map(s => `<span class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">${s}</span>`).join('')}
+              <span class="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 font-semibold">
+                ${item.items || '-'} 项
+              </span>
+            </div>
           </div>
         </div>
       `).join('');
@@ -1058,18 +1093,47 @@ I'm not interested in:
       document.getElementById('results-panel').classList.add('hidden');
     }
 
-    // Simple markdown renderer
+    // Markdown renderer
     function renderMarkdown(text) {
-      return text
-        .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
-        .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold mt-6 mb-3">$1</h2>')
-        .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-8 mb-4">$1</h1>')
-        .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-        .replace(/\*(.*)\*/gim, '<em>$1</em>')
-        .replace(/`([^`]+)`/gim, '<code class="bg-slate-100 px-1 py-0.5 rounded text-sm font-mono">$1</code>')
-        .replace(/\[([^\]]+)\]\(([^)]+)\)/gim, '<a href="$2" target="_blank" class="text-emerald-600 hover:underline">$1</a>')
-        .replace(/- (.*$)/gim, '<li class="ml-4">$1</li>')
-        .replace(/\n/gim, '<br>');
+      // Split into lines, process block-level first
+      const lines = text.split('\n');
+      let html = '';
+      let inList = false;
+
+      for (let line of lines) {
+        const trimmed = line.trim();
+
+        // Close list if we're leaving a list context
+        if (inList && !trimmed.startsWith('- ') && !trimmed.startsWith('* ')) {
+          html += '</ul>';
+          inList = false;
+        }
+
+        if (trimmed.startsWith('### ')) {
+          html += `<h3 class="text-lg font-semibold mt-4 mb-2">${inline(trimmed.slice(4))}</h3>`;
+        } else if (trimmed.startsWith('## ')) {
+          html += `<h2 class="text-xl font-semibold mt-6 mb-3">${inline(trimmed.slice(3))}</h2>`;
+        } else if (trimmed.startsWith('# ')) {
+          html += `<h1 class="text-2xl font-bold mt-8 mb-4">${inline(trimmed.slice(2))}</h1>`;
+        } else if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          if (!inList) { html += '<ul class="list-disc pl-5 my-2 space-y-1">'; inList = true; }
+          html += `<li>${inline(trimmed.slice(2))}</li>`;
+        } else if (trimmed === '') {
+          html += '<div class="h-2"></div>';
+        } else {
+          html += `<p class="mb-2 leading-relaxed">${inline(trimmed)}</p>`;
+        }
+      }
+      if (inList) html += '</ul>';
+      return html;
+
+      function inline(s) {
+        return s
+          .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+          .replace(/\*(.+?)\*/g, '<em>$1</em>')
+          .replace(/`([^`]+)`/g, '<code class="bg-slate-100 px-1 py-0.5 rounded text-sm font-mono">$1</code>')
+          .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-emerald-600 hover:underline">$1</a>');
+      }
     }
 
     // Helpers
@@ -1102,21 +1166,48 @@ I'm not interested in:
 
     function showToast(message, type = 'success') {
       const toast = document.getElementById('toast');
+      const card = document.getElementById('toast-card');
+      const icon = document.getElementById('toast-icon');
       const msg = document.getElementById('toast-message');
 
-      // Update toast style based on type
-      const colors = {
-        success: 'border-emerald-200',
-        error: 'border-red-200',
-        warning: 'border-yellow-200'
+      const styles = {
+        success: {
+          border: 'border-emerald-200',
+          iconBg: 'bg-emerald-100',
+          iconColor: 'text-emerald-600',
+          svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>'
+        },
+        error: {
+          border: 'border-red-200',
+          iconBg: 'bg-red-100',
+          iconColor: 'text-red-600',
+          svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>'
+        },
+        warning: {
+          border: 'border-amber-200',
+          iconBg: 'bg-amber-100',
+          iconColor: 'text-amber-600',
+          svg: '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z"/>'
+        }
       };
+      const s = styles[type] || styles.success;
 
-      toast.querySelector('.glass-card').className = `glass-card rounded-xl px-4 py-3 border shadow-lg flex items-center gap-3 ${colors[type] || colors.success}`;
+      card.className = `glass-card rounded-xl px-4 py-3 border shadow-lg flex items-center gap-3 ${s.border}`;
+      icon.className = `w-6 h-6 rounded-full flex items-center justify-center ${s.iconBg}`;
+      icon.innerHTML = `<svg class="w-4 h-4 ${s.iconColor}" fill="none" stroke="currentColor" viewBox="0 0 24 24">${s.svg}</svg>`;
       msg.textContent = message;
-      toast.classList.remove('hidden');
 
-      setTimeout(() => {
-        toast.classList.add('hidden');
+      toast.classList.remove('hidden');
+      requestAnimationFrame(() => {
+        toast.classList.remove('translate-y-2', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+      });
+
+      clearTimeout(showToast._timer);
+      showToast._timer = setTimeout(() => {
+        toast.classList.add('translate-y-2', 'opacity-0');
+        toast.classList.remove('translate-y-0', 'opacity-100');
+        setTimeout(() => toast.classList.add('hidden'), 300);
       }, 3000);
     }
   </script>
