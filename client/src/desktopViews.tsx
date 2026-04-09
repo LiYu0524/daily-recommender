@@ -21,6 +21,69 @@ import { closeWindow, isTauriDesktop, isWindowMaximized, minimizeWindow, openExt
 
 type RunState = "idle" | "running" | "done" | "error";
 type SourceCard = { key: SourceName; label: string; description: string; icon: string; selected: boolean };
+type InterestTags = { positive: string[]; negative: string[] };
+
+function uniqueTags(items: string[]) {
+  return [...new Set(items.map((item) => item.trim()).filter(Boolean))];
+}
+
+function splitInterestLine(value: string) {
+  return uniqueTags(value.split(/[|,，;\n]/g));
+}
+
+function parseInterestDescription(value: string): InterestTags {
+  const raw = value.trim();
+  if (!raw) {
+    return { positive: [], negative: [] };
+  }
+
+  const positive: string[] = [];
+  const negative: string[] = [];
+  let parsedStructured = false;
+
+  for (const line of raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
+    if (/^(positive|正向|喜欢|关注)\s*:/i.test(line)) {
+      positive.push(...splitInterestLine(line.replace(/^[^:：]+[:：]\s*/u, "")));
+      parsedStructured = true;
+      continue;
+    }
+    if (/^(negative|负向|排除|屏蔽)\s*:/i.test(line)) {
+      negative.push(...splitInterestLine(line.replace(/^[^:：]+[:：]\s*/u, "")));
+      parsedStructured = true;
+      continue;
+    }
+    if (/^[+＋]\s*/u.test(line)) {
+      positive.push(line.replace(/^[+＋]\s*/u, ""));
+      parsedStructured = true;
+      continue;
+    }
+    if (/^[-－]\s*/u.test(line)) {
+      negative.push(line.replace(/^[-－]\s*/u, ""));
+      parsedStructured = true;
+      continue;
+    }
+  }
+
+  if (!parsedStructured) {
+    return { positive: splitInterestLine(raw), negative: [] };
+  }
+
+  return {
+    positive: uniqueTags(positive),
+    negative: uniqueTags(negative),
+  };
+}
+
+function serializeInterestDescription(tags: InterestTags) {
+  const lines: string[] = [];
+  if (tags.positive.length > 0) {
+    lines.push(`Positive: ${tags.positive.join(" | ")}`);
+  }
+  if (tags.negative.length > 0) {
+    lines.push(`Negative: ${tags.negative.join(" | ")}`);
+  }
+  return lines.join("\n");
+}
 
 export function TitleBar(props: { backendHealthy: boolean; statusText: string; previewBadge: string; title: string }) {
   const desktop = isTauriDesktop();
@@ -91,10 +154,13 @@ export function ControlCenter(props: {
   savingProfile: boolean;
   testingConnection: boolean;
   connectionTestResult: { kind: "idle" | "success" | "error"; message: string };
+  testingSmtpConnection: boolean;
+  smtpTestResult: { kind: "idle" | "success" | "error"; message: string };
   onChangeConfig: (value: ConfigData) => void;
   onChangeUserProfile: (value: UserProfile) => void;
   onSave: () => Promise<void>;
   onTestConnection: () => Promise<void>;
+  onTestSmtpConnection: () => Promise<void>;
   onSaveProfile: () => Promise<void>;
   onStartBackend: () => Promise<void>;
   onStopBackend: () => Promise<void>;
@@ -186,6 +252,8 @@ export function ControlCenter(props: {
 
         {activeTab === "subscriptions" ? <section className="control-section">
           <div className="control-section-title"><span>{props.copy.settings.basic}</span></div>
+          <label className="form-field"><span>{props.copy.settings.desktopPythonPath}</span><input value={props.config.desktop_python_path} onChange={(event) => set("desktop_python_path", event.target.value)} placeholder="C:\\Users\\you\\miniconda3\\envs\\ideer\\python.exe" /></label>
+          <p className="help-copy">{props.copy.settings.desktopPythonHint}</p>
           <div className="form-grid three"><label className="form-field"><span>{props.copy.settings.provider}</span><input value={props.config.provider} onChange={(event) => set("provider", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.modelName}</span><input value={props.config.model} onChange={(event) => set("model", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.temperature}</span><input type="number" step="0.1" value={props.config.temperature} onChange={(event) => set("temperature", Number(event.target.value))} /></label></div>
           <div className="form-grid two"><label className="form-field"><span>{props.copy.settings.baseUrl}</span><input value={props.config.base_url} onChange={(event) => set("base_url", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.apiKey}</span><input value={props.config.api_key} onChange={(event) => set("api_key", event.target.value)} /></label></div>
           <p className="help-copy">{props.copy.settings.connectionHint}</p>
@@ -204,7 +272,14 @@ export function ControlCenter(props: {
           </div>
           <p className="help-copy">{props.copy.settings.managedMailHint}</p>
           <div className="form-grid three"><label className="form-field"><span>{props.copy.settings.smtpServer}</span><input value={props.config.smtp_server} onChange={(event) => set("smtp_server", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.smtpPort}</span><input type="number" value={props.config.smtp_port} onChange={(event) => set("smtp_port", Number(event.target.value))} /></label><label className="form-field"><span>{props.copy.settings.sender}</span><input value={props.config.sender} onChange={(event) => set("sender", event.target.value)} /></label></div>
-          <div className="form-grid two"><label className="form-field"><span>{props.copy.settings.receiver}</span><input value={props.config.receiver} onChange={(event) => set("receiver", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.smtpPassword}</span><input value={props.config.smtp_password} onChange={(event) => set("smtp_password", event.target.value)} /></label></div>
+          <div className="form-grid two"><label className="form-field"><span>{props.copy.settings.receiver}</span><input value={props.config.receiver} onChange={(event) => set("receiver", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.smtpPassword}</span><input type="password" value={props.config.smtp_password} onChange={(event) => set("smtp_password", event.target.value)} /></label></div>
+          <p className="help-copy">{props.copy.settings.smtpConnectionHint}</p>
+          <div className="test-connection-row">
+            <button className="secondary-action" onClick={() => void props.onTestSmtpConnection()} disabled={props.testingSmtpConnection}>
+              {props.testingSmtpConnection ? props.copy.settings.testingSmtp : props.copy.settings.testSmtp}
+            </button>
+            {props.smtpTestResult.kind !== "idle" ? <span className={props.smtpTestResult.kind === "success" ? "test-result success" : "test-result error"}>{props.smtpTestResult.message}</span> : null}
+          </div>
         </section> : null}
 
         {activeTab === "info" ? <section className="control-section">
@@ -287,37 +362,141 @@ export function SidebarButton(props: { icon: IconDefinition; label: string; acti
 
 export function HomeView(props: {
   backendHealthy: boolean; loadingData: boolean; errorText: string; statusText: string; config: ConfigData; copy: AppCopy;
-  recentHistory: HistoryEntry[]; sources: SourceCard[]; startingBackend: boolean; runForm: RunRequest; runState: RunState; logs: string[]; runFiles: string[]; historyLoading: boolean;
+  recentHistory: HistoryEntry[]; sources: SourceCard[]; comingSoonSources: ReadonlyArray<{ key: string; label: string }>; startingBackend: boolean; runForm: RunRequest; runState: RunState; logs: string[]; runFiles: string[]; historyLoading: boolean; runDisabledReason: string;
   onOpenSettings: () => void; onRefresh: () => Promise<void>; onRun: () => void; onRefreshHistory: () => Promise<void>;
   onStartBackend: () => Promise<void>; onStopBackend: () => Promise<void>; onOpenHistory: (entry: HistoryEntry) => Promise<void>;
-  onToggleSource: (source: SourceName) => void; onChangeRunForm: <K extends keyof RunRequest>(key: K, value: RunRequest[K]) => void;
+  onToggleSource: (source: SourceName) => void; onChangeRunForm: <K extends keyof RunRequest>(key: K, value: RunRequest[K]) => void; onSaveInterestDescription: (value: string) => Promise<void>; savingInterestDescription: boolean;
 }) {
+  const [showComingSoonToast, setShowComingSoonToast] = useState(false);
+  const sourceWiseSelected = props.runForm.delivery_mode === "source_emails";
+  const combinedSelected = props.runForm.delivery_mode === "combined_report";
+  const [positiveInput, setPositiveInput] = useState("");
+  const [negativeInput, setNegativeInput] = useState("");
+  const [interestTags, setInterestTags] = useState<InterestTags>(() => parseInterestDescription(props.runForm.description));
+
+  useEffect(() => {
+    if (!showComingSoonToast) {
+      return;
+    }
+    const timer = window.setTimeout(() => setShowComingSoonToast(false), 1400);
+    return () => window.clearTimeout(timer);
+  }, [showComingSoonToast]);
+
+  useEffect(() => {
+    setInterestTags(parseInterestDescription(props.runForm.description));
+  }, [props.runForm.description]);
+
+  function toggleDeliveryMode(target: "source" | "combined") {
+    props.onChangeRunForm("delivery_mode", target === "source" ? "source_emails" : "combined_report");
+  }
+
+  function updateInterestTags(next: InterestTags) {
+    const normalized = {
+      positive: uniqueTags(next.positive),
+      negative: uniqueTags(next.negative),
+    };
+    setInterestTags(normalized);
+    props.onChangeRunForm("description", serializeInterestDescription(normalized));
+  }
+
+  function addTag(kind: keyof InterestTags) {
+    const input = kind === "positive" ? positiveInput : negativeInput;
+    const tokens = splitInterestLine(input);
+    if (tokens.length === 0) {
+      return;
+    }
+    updateInterestTags({
+      ...interestTags,
+      [kind]: [...interestTags[kind], ...tokens],
+    });
+    if (kind === "positive") {
+      setPositiveInput("");
+    } else {
+      setNegativeInput("");
+    }
+  }
+
+  function removeTag(kind: keyof InterestTags, tag: string) {
+    updateInterestTags({
+      ...interestTags,
+      [kind]: interestTags[kind].filter((item) => item !== tag),
+    });
+  }
+
   return <section className="page-grid">
     {props.errorText && <div className="notice error">{props.errorText}</div>}
-    <div className="hero-panel">
-      <div><h2>{props.copy.home.title}</h2><p className="hero-copy">{props.copy.home.description}</p></div>
-      <div className="hero-actions"><button className="primary-action" onClick={props.onRun} disabled={!props.backendHealthy || props.runState === "running" || props.runForm.sources.length === 0}>{props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run}</button><button className="secondary-action" onClick={props.onOpenSettings}>{props.copy.home.openSettings}</button></div>
-    </div>
-    <div className="status-grid">
-      <article className="metric-card"><span>{props.copy.home.backend}</span><strong>{props.backendHealthy ? props.copy.home.online : props.copy.home.offline}</strong><p>{props.statusText}</p><div className="metric-actions">{!props.backendHealthy && isTauriDesktop() && <button className="primary-action" onClick={() => void props.onStartBackend()} disabled={props.startingBackend}>{props.startingBackend ? props.copy.home.startingBackend : props.copy.home.startBackend}</button>}{props.backendHealthy && <button className="secondary-action" onClick={() => void props.onRefresh()}>{props.loadingData ? props.copy.home.refreshing : props.copy.home.refresh}</button>}{props.backendHealthy && isTauriDesktop() && <button className="ghost-action" onClick={() => void props.onStopBackend()}>{props.copy.home.stopBackend}</button>}</div></article>
-      <article className="metric-card"><span>{props.copy.home.model}</span><strong>{props.config.model || props.copy.currentModelMissing}</strong><p>{props.config.provider || "openai"} / temperature {props.config.temperature}</p></article>
-      <article className="metric-card"><span>{props.copy.home.mail}</span><strong>{props.config.smtp_server ? props.copy.home.mailReady : props.copy.home.mailPending}</strong><p>{props.config.receiver || props.copy.home.noReceiver}</p></article>
-    </div>
-    <div className="content-grid">
+    {props.runDisabledReason ? <div className="notice info">{props.runDisabledReason}</div> : null}
+    {showComingSoonToast ? <div className="coming-soon-toast">Coming Soon</div> : null}
+    <div className="home-grid top">
       <section className="content-panel">
         <div className="section-heading">
           <div><h3>{props.copy.home.sources}</h3></div>
-          <button className="primary-action" onClick={props.onRun} disabled={!props.backendHealthy || props.runState === "running" || props.runForm.sources.length === 0}>{props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run}</button>
+          <div className="metric-actions">
+            {!props.backendHealthy && isTauriDesktop() && <button className="secondary-action" onClick={() => void props.onStartBackend()} disabled={props.startingBackend}>{props.startingBackend ? props.copy.home.startingBackend : props.copy.home.startBackend}</button>}
+            {props.backendHealthy && <button className="secondary-action" onClick={() => void props.onRefresh()}>{props.loadingData ? props.copy.home.refreshing : props.copy.home.refresh}</button>}
+            {props.backendHealthy && isTauriDesktop() && <button className="ghost-action" onClick={() => void props.onStopBackend()}>{props.copy.home.stopBackend}</button>}
+            <button className="primary-action" onClick={props.onRun} disabled={!props.backendHealthy || props.runState === "running" || props.runForm.sources.length === 0}>{props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run}</button>
+          </div>
         </div>
-        <div className="source-picker-grid">{props.sources.map((source) => <label key={source.key} data-source={source.key} className={source.selected ? "source-picker-card active" : "source-picker-card"}><input type="checkbox" checked={source.selected} onChange={() => props.onToggleSource(source.key)} /><img src={source.icon} alt={source.label} className="source-icon large" /><div><strong>{source.label}</strong><p>{source.description}</p></div></label>)}</div>
-        <div className="form-grid two"><label className="form-field"><span>{props.copy.workbench.receiver}</span><input value={props.runForm.receiver} onChange={(event) => props.onChangeRunForm("receiver", event.target.value)} /></label><label className="form-field"><span>{props.copy.workbench.deliveryMode}</span><select value={props.runForm.delivery_mode} onChange={(event) => props.onChangeRunForm("delivery_mode", event.target.value as RunRequest["delivery_mode"])}><option value="source_emails">{props.copy.workbench.sourceEmails}</option><option value="combined_report">{props.copy.workbench.combinedReport}</option><option value="both">{props.copy.workbench.both}</option></select></label></div>
-        <div className="toggle-row"><label><input type="checkbox" checked={props.runForm.generate_report} onChange={(event) => props.onChangeRunForm("generate_report", event.target.checked)} /> {props.copy.workbench.report}</label><label><input type="checkbox" checked={props.runForm.generate_ideas} onChange={(event) => props.onChangeRunForm("generate_ideas", event.target.checked)} /> {props.copy.workbench.ideas}</label><label><input type="checkbox" checked={props.runForm.save} onChange={(event) => props.onChangeRunForm("save", event.target.checked)} /> {props.copy.workbench.save}</label></div>
-        <label className="form-field"><span>{props.copy.workbench.description}</span><textarea rows={4} value={props.runForm.description} onChange={(event) => props.onChangeRunForm("description", event.target.value)} /></label>
+        <div className="source-picker-grid">
+          {props.sources.map((source) => <label key={source.key} data-source={source.key} className={source.selected ? "source-picker-card active" : "source-picker-card"}><input type="checkbox" checked={source.selected} onChange={() => props.onToggleSource(source.key)} /><img src={source.icon} alt={source.label} className="source-icon large" /><div><strong>{source.label}</strong><p>{source.description}</p></div></label>)}
+          {props.comingSoonSources.map((source) => <button key={source.key} type="button" className="source-picker-card coming-soon clickable" onClick={() => setShowComingSoonToast(true)}><div className="coming-soon-dot" /><div><strong>{source.label}</strong><p>Coming Soon</p></div></button>)}
+        </div>
+        <div className="form-grid two"><label className="form-field"><span>{props.copy.workbench.receiver}</span><input value={props.runForm.receiver} onChange={(event) => props.onChangeRunForm("receiver", event.target.value)} /></label><div className="form-field"><span>{props.copy.workbench.deliveryMode}</span><div className="segmented-toggle-group delivery-mode-control"><button type="button" data-mode="source" className={sourceWiseSelected ? "segmented-toggle-button active" : "segmented-toggle-button"} onClick={() => toggleDeliveryMode("source")}>{props.copy.workbench.sourceEmails}</button><button type="button" data-mode="combined" className={combinedSelected ? "segmented-toggle-button active" : "segmented-toggle-button"} onClick={() => toggleDeliveryMode("combined")}>{props.copy.workbench.combinedReport}</button></div></div></div>
+        <div className="feature-toggle-row">
+          <button type="button" className={props.runForm.generate_report ? "feature-toggle-button active" : "feature-toggle-button"} onClick={() => props.onChangeRunForm("generate_report", !props.runForm.generate_report)}>{props.copy.workbench.report}</button>
+          <button type="button" className={props.runForm.generate_ideas ? "feature-toggle-button active" : "feature-toggle-button"} onClick={() => props.onChangeRunForm("generate_ideas", !props.runForm.generate_ideas)}>{props.copy.workbench.ideas}</button>
+          <button type="button" className={props.runForm.save ? "feature-toggle-button active" : "feature-toggle-button"} onClick={() => props.onChangeRunForm("save", !props.runForm.save)}>{props.copy.workbench.save}</button>
+        </div>
+        <div className="form-field">
+          <span>{props.copy.workbench.description}</span>
+          <div className="interest-tag-editor">
+            <div className="interest-tag-grid">
+              <section className="interest-tag-panel positive">
+                <div className="interest-tag-header">
+                  <strong>{props.copy.workbench.positiveTags}</strong>
+                </div>
+                <div className="interest-chip-list">
+                  {interestTags.positive.length === 0 ? <span className="interest-chip empty">+</span> : interestTags.positive.map((tag) => <button key={`pos-${tag}`} type="button" className="interest-chip positive" onClick={() => removeTag("positive", tag)}>{tag}<FontAwesomeIcon icon={faXmark} /></button>)}
+                </div>
+                <div className="interest-input-row">
+                  <input value={positiveInput} placeholder={props.copy.workbench.positivePlaceholder} onChange={(event) => setPositiveInput(event.target.value)} onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addTag("positive");
+                    }
+                  }} />
+                  <button type="button" className="secondary-action" onClick={() => addTag("positive")}>{props.copy.workbench.addTag}</button>
+                </div>
+              </section>
+              <section className="interest-tag-panel negative">
+                <div className="interest-tag-header">
+                  <strong>{props.copy.workbench.negativeTags}</strong>
+                </div>
+                <div className="interest-chip-list">
+                  {interestTags.negative.length === 0 ? <span className="interest-chip empty">-</span> : interestTags.negative.map((tag) => <button key={`neg-${tag}`} type="button" className="interest-chip negative" onClick={() => removeTag("negative", tag)}>{tag}<FontAwesomeIcon icon={faXmark} /></button>)}
+                </div>
+                <div className="interest-input-row">
+                  <input value={negativeInput} placeholder={props.copy.workbench.negativePlaceholder} onChange={(event) => setNegativeInput(event.target.value)} onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addTag("negative");
+                    }
+                  }} />
+                  <button type="button" className="secondary-action" onClick={() => addTag("negative")}>{props.copy.workbench.addTag}</button>
+                </div>
+              </section>
+            </div>
+            <div className="interest-save-row">
+              <button type="button" className="secondary-action" onClick={() => void props.onSaveInterestDescription(serializeInterestDescription(interestTags))} disabled={props.savingInterestDescription}>{props.savingInterestDescription ? props.copy.workbench.savingInterest : props.copy.workbench.saveInterest}</button>
+            </div>
+          </div>
+        </div>
       </section>
-      <section className="content-panel"><div className="section-heading"><div><h3>{props.copy.home.recentRuns}</h3></div></div>{props.recentHistory.length === 0 ? <div className="empty-state">{props.copy.home.noHistory}</div> : <div className="history-compact-list">{props.recentHistory.map((entry) => <button key={entry.id} className="history-compact-item" onClick={() => void props.onOpenHistory(entry)}><strong>{entry.type}</strong><span>{entry.date}</span><span>{entry.items} items</span></button>)}</div>}</section>
-    </div>
-    <div className="content-grid">
       <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.logs}</h3><span className={`run-badge ${props.runState}`}>{props.runState}</span></div><div className="terminal-panel">{props.logs.length === 0 ? <div className="empty-terminal">{props.copy.workbench.logEmpty}</div> : props.logs.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}</div></section>
+    </div>
+    <div className="home-grid bottom">
+      <section className="content-panel"><div className="section-heading"><div><h3>{props.copy.home.recentRuns}</h3></div></div>{props.recentHistory.length === 0 ? <div className="empty-state">{props.copy.home.noHistory}</div> : <div className="history-compact-list">{props.recentHistory.map((entry) => <button key={entry.id} className="history-compact-item" onClick={() => void props.onOpenHistory(entry)}><strong>{entry.type}</strong><span>{entry.date}</span><span>{entry.items} items</span></button>)}</div>}</section>
       <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.outputs}</h3><button className="secondary-action" onClick={() => void props.onRefreshHistory()} disabled={props.historyLoading}>{props.historyLoading ? props.copy.library.refreshing : props.copy.workbench.refreshHistory}</button></div>{props.runFiles.length === 0 ? <div className="empty-state">{props.copy.workbench.outputEmpty}</div> : <ul className="file-output-list">{props.runFiles.map((file) => <li key={file}>{file}</li>)}</ul>}</section>
     </div>
   </section>;
@@ -368,7 +547,7 @@ export function SettingsView(props: { backendHealthy: boolean; config: ConfigDat
       <div className="form-grid three"><label className="form-field"><span>{props.copy.settings.provider}</span><input value={props.config.provider} onChange={(event) => set("provider", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.modelName}</span><input value={props.config.model} onChange={(event) => set("model", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.temperature}</span><input type="number" step="0.1" value={props.config.temperature} onChange={(event) => set("temperature", Number(event.target.value))} /></label></div>
       <div className="form-grid two"><label className="form-field"><span>{props.copy.settings.baseUrl}</span><input value={props.config.base_url} onChange={(event) => set("base_url", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.apiKey}</span><input value={props.config.api_key} onChange={(event) => set("api_key", event.target.value)} /></label></div>
       <div className="form-grid three"><label className="form-field"><span>{props.copy.settings.smtpServer}</span><input value={props.config.smtp_server} onChange={(event) => set("smtp_server", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.smtpPort}</span><input type="number" value={props.config.smtp_port} onChange={(event) => set("smtp_port", Number(event.target.value))} /></label><label className="form-field"><span>{props.copy.settings.sender}</span><input value={props.config.sender} onChange={(event) => set("sender", event.target.value)} /></label></div>
-      <div className="form-grid two"><label className="form-field"><span>{props.copy.settings.receiver}</span><input value={props.config.receiver} onChange={(event) => set("receiver", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.smtpPassword}</span><input value={props.config.smtp_password} onChange={(event) => set("smtp_password", event.target.value)} /></label></div>
+      <div className="form-grid two"><label className="form-field"><span>{props.copy.settings.receiver}</span><input value={props.config.receiver} onChange={(event) => set("receiver", event.target.value)} /></label><label className="form-field"><span>{props.copy.settings.smtpPassword}</span><input type="password" value={props.config.smtp_password} onChange={(event) => set("smtp_password", event.target.value)} /></label></div>
     </div>
     <div className="content-panel"><div className="section-heading compact"><h3>{props.copy.settings.content}</h3></div>
       <label className="form-field"><span>{props.copy.settings.description}</span><textarea rows={5} value={props.config.description} onChange={(event) => set("description", event.target.value)} /></label>

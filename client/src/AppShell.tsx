@@ -19,11 +19,21 @@ import {
 } from "./desktopViews";
 import {
   closeWindow,
+  emitConfigChange,
+  emitPreferenceChange,
+  emitUserProfileChange,
   isTauriDesktop,
+  listenConfigChange,
+  listenPreferenceChange,
+  listenUserProfileChange,
+  loadDesktopConfig,
   openExternalUrl,
   openControlPanelWindow,
+  readManagedBackendLog,
+  saveDesktopConfig,
   startManagedBackend,
   stopManagedBackend,
+  testSmtpConnection,
 } from "./desktop";
 import {
   COPY,
@@ -66,6 +76,7 @@ type ControlPanel = "none" | "settings";
 type SettingsTab = "profile" | "preferences" | "subscriptions" | "mail" | "info";
 
 const DEFAULT_CONFIG: ConfigData = {
+  desktop_python_path: "",
   provider: "openai", model: "gpt-4o-mini", base_url: "", api_key: "", temperature: 0.5,
   smtp_server: "", smtp_port: 465, sender: "", receiver: "", smtp_password: "",
   gh_languages: "all", gh_since: "daily", gh_max_repos: 30,
@@ -110,6 +121,46 @@ const SOURCES = [
   { key: "arxiv", label: "arXiv", description: "新论文抓取与筛选", iconLight: iconArxiv, iconDark: iconArxiv, iconActive: iconArxiv },
 ] satisfies Array<{ key: SourceName; label: string; description: string; iconLight: string; iconDark: string; iconActive: string }>;
 
+const COMING_SOON_SOURCES = [
+  { key: "wos", label: "Web of Science" },
+  { key: "cnki", label: "知网" },
+  { key: "wechat", label: "微信公众号" },
+  { key: "scholar", label: "Google Scholar" },
+] as const;
+
+function parseInterestSummary(value: string) {
+  const raw = value.trim();
+  if (!raw) {
+    return { positive: [] as string[], negative: [] as string[] };
+  }
+
+  const positive: string[] = [];
+  const negative: string[] = [];
+  let structured = false;
+
+  for (const line of raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)) {
+    if (/^(positive|正向|喜欢|关注)\s*:/i.test(line)) {
+      positive.push(...line.replace(/^[^:：]+[:：]\s*/u, "").split(/[|,，;\n]/g).map((item) => item.trim()).filter(Boolean));
+      structured = true;
+      continue;
+    }
+    if (/^(negative|负向|排除|屏蔽)\s*:/i.test(line)) {
+      negative.push(...line.replace(/^[^:：]+[:：]\s*/u, "").split(/[|,，;\n]/g).map((item) => item.trim()).filter(Boolean));
+      structured = true;
+      continue;
+    }
+  }
+
+  if (!structured) {
+    return {
+      positive: raw.split(/[|,，;\n]/g).map((item) => item.trim()).filter(Boolean),
+      negative: [],
+    };
+  }
+
+  return { positive, negative };
+}
+
 export default function AppShell() {
   const desktopWindow = isTauriDesktop();
   const forcedTab = readTabFromLocation();
@@ -137,9 +188,12 @@ export default function AppShell() {
   const [statusText, setStatusText] = useState("等待连接服务");
   const [historyLoading, setHistoryLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
+  const [savingInterestDescription, setSavingInterestDescription] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionTestResult, setConnectionTestResult] = useState<{ kind: "idle" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
+  const [testingSmtpConnection, setTestingSmtpConnection] = useState(false);
+  const [smtpTestResult, setSmtpTestResult] = useState<{ kind: "idle" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
   const [errorText, setErrorText] = useState("");
   const language = resolveLanguage(languagePreference);
   const theme = resolveTheme(themePreference);
@@ -156,10 +210,12 @@ export default function AppShell() {
 
   useEffect(() => {
     window.localStorage.setItem("ideer.language", languagePreference);
+    void emitPreferenceChange({ languagePreference, themePreference });
   }, [languagePreference]);
 
   useEffect(() => {
     window.localStorage.setItem("ideer.theme", themePreference);
+    void emitPreferenceChange({ languagePreference, themePreference });
   }, [themePreference]);
 
   useEffect(() => {
@@ -167,8 +223,64 @@ export default function AppShell() {
   }, [theme]);
 
   useEffect(() => {
+    const handleStorage = () => {
+      const nextLanguage = readPreference<LanguagePreference>("ideer.language", "system");
+      const nextTheme = readPreference<ThemePreference>("ideer.theme", "system");
+      setLanguagePreference((prev) => prev === nextLanguage ? prev : nextLanguage);
+      setThemePreference((prev) => prev === nextTheme ? prev : nextTheme);
+    };
+
+    window.addEventListener("storage", handleStorage);
+
+    let unlisten: (() => void) | undefined;
+    let unlistenConfig: (() => void) | undefined;
+    let unlistenUserProfile: (() => void) | undefined;
+    void listenPreferenceChange((payload) => {
+      setLanguagePreference((prev) => prev === payload.languagePreference ? prev : payload.languagePreference);
+      setThemePreference((prev) => prev === payload.themePreference ? prev : payload.themePreference);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    void listenConfigChange((nextConfig) => {
+      setConfig(nextConfig);
+      setRunForm((prev) => ({
+        ...prev,
+        receiver: nextConfig.receiver,
+        description: nextConfig.description,
+        researcher_profile: nextConfig.researcher_profile,
+      }));
+      setUserProfile((prev) => normalizeUserProfile({
+        ...prev,
+        receiver: nextConfig.receiver,
+        focus: nextConfig.description,
+      }));
+    }).then((dispose) => {
+      unlistenConfig = dispose;
+    });
+
+    void listenUserProfileChange((nextProfile) => {
+      setUserProfile(normalizeUserProfile(nextProfile));
+      window.localStorage.setItem("ideer.user", JSON.stringify(normalizeUserProfile(nextProfile)));
+    }).then((dispose) => {
+      unlistenUserProfile = dispose;
+    });
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      unlisten?.();
+      unlistenConfig?.();
+      unlistenUserProfile?.();
+    };
+  }, []);
+
+  useEffect(() => {
     setConnectionTestResult({ kind: "idle", message: "" });
   }, [config.provider, config.model, config.base_url, config.api_key]);
+
+  useEffect(() => {
+    setSmtpTestResult({ kind: "idle", message: "" });
+  }, [config.smtp_server, config.smtp_port]);
 
   useEffect(() => {
     if (themePreference !== "system") {
@@ -183,6 +295,7 @@ export default function AppShell() {
   }, [themePreference]);
 
   async function initialize() {
+    await hydrateLocalDesktopConfig();
     void loadAboutData();
     if (await refreshHealth()) {
       await hydrate();
@@ -212,6 +325,32 @@ export default function AppShell() {
     }
   }
 
+  async function hydrateLocalDesktopConfig() {
+    if (!desktopWindow) {
+      return;
+    }
+    try {
+      const localConfig = await loadDesktopConfig();
+      if (!localConfig) {
+        return;
+      }
+      setConfig(localConfig);
+      setRunForm((prev) => ({
+        ...prev,
+        receiver: localConfig.receiver,
+        description: localConfig.description,
+        researcher_profile: localConfig.researcher_profile,
+      }));
+      setUserProfile((prev) => normalizeUserProfile({
+        ...prev,
+        receiver: localConfig.receiver || prev.receiver,
+        focus: localConfig.description,
+      }));
+    } catch {
+      // ignore local config parse failures and keep defaults
+    }
+  }
+
   async function hydrate() {
     try {
       setLoadingData(true);
@@ -221,8 +360,8 @@ export default function AppShell() {
       setRunForm((prev) => ({ ...prev, receiver: configData.receiver, description: configData.description, researcher_profile: configData.researcher_profile }));
       setUserProfile((prev) => normalizeUserProfile({
         ...prev,
-        receiver: prev.receiver || configData.receiver,
-        focus: prev.focus || configData.description,
+        receiver: configData.receiver || prev.receiver,
+        focus: configData.description,
       }));
       setHistory(historyData);
       setStatusText(copy.statusConnected);
@@ -237,17 +376,32 @@ export default function AppShell() {
   async function handleStartBackend() {
     try {
       setStartingBackend(true);
+      setErrorText("");
+      setLogs(["[iDeer] 正在启动本地服务..."]);
       await startManagedBackend();
       for (let i = 0; i < 12; i += 1) {
         if (await refreshHealth()) {
           await hydrate();
           setStatusText(copy.statusBackendStarted);
+          setLogs((prev) => [...prev, "[iDeer] 本地服务已启动。"]);
           return;
         }
         await delay(1000);
       }
+      const backendLog = await readManagedBackendLog().catch(() => "");
+      const message = backendLog
+        ? `本地服务进程已尝试启动，但健康检查仍未通过。\n\n后端日志：\n${backendLog}`
+        : "本地服务进程已尝试启动，但健康检查仍未通过。请确认 Python 解释器路径正确，且该环境已安装 FastAPI、Uvicorn、Pydantic。";
+      setErrorText(message);
+      setLogs((prev) => [...prev, `[iDeer] 启动失败\n${message}`]);
     } catch (error) {
-      setErrorText(getErrorMessage(error));
+      const backendLog = await readManagedBackendLog().catch(() => "");
+      const errorMessage = getErrorMessage(error);
+      const message = backendLog && !errorMessage.includes(backendLog)
+        ? `${errorMessage}\n\n后端日志：\n${backendLog}`
+        : errorMessage;
+      setErrorText(message);
+      setLogs((prev) => [...prev, `[iDeer] 启动失败\n${message}`]);
     } finally {
       setStartingBackend(false);
     }
@@ -278,15 +432,63 @@ export default function AppShell() {
   }
 
   async function persistConfig() {
-    if (!backendHealthy) return;
     try {
       setSavingConfig(true);
-      await saveConfig(config);
-      setStatusText(copy.statusConfigSaved);
+      setRunForm((prev) => ({
+        ...prev,
+        receiver: config.receiver,
+        description: config.description,
+        researcher_profile: config.researcher_profile,
+      }));
+      setUserProfile((prev) => normalizeUserProfile({
+        ...prev,
+        receiver: config.receiver || prev.receiver,
+        focus: config.description,
+      }));
+      if (desktopWindow) {
+        await saveDesktopConfig(config);
+        await emitConfigChange(config);
+      }
+      if (backendHealthy) {
+        await saveConfig(config);
+      }
+      setStatusText(copy.statusConfigSaved + (backendHealthy ? "" : "（已保存到本地客户端配置）"));
     } catch (error) {
       setErrorText(getErrorMessage(error));
     } finally {
       setSavingConfig(false);
+    }
+  }
+
+  async function persistInterestDescription(description: string) {
+    const nextDescription = description.trim();
+    const nextConfig = {
+      ...config,
+      description: nextDescription,
+    };
+    try {
+      setSavingInterestDescription(true);
+      setConfig(nextConfig);
+      setRunForm((prev) => ({
+        ...prev,
+        description: nextDescription,
+      }));
+      setUserProfile((prev) => normalizeUserProfile({
+        ...prev,
+        focus: nextDescription,
+      }));
+      if (desktopWindow) {
+        await saveDesktopConfig(nextConfig);
+        await emitConfigChange(nextConfig);
+      }
+      if (backendHealthy) {
+        await saveConfig(nextConfig);
+      }
+      setStatusText(copy.statusConfigSaved + (backendHealthy ? "" : "（已保存到本地客户端配置）"));
+    } catch (error) {
+      setErrorText(getErrorMessage(error));
+    } finally {
+      setSavingInterestDescription(false);
     }
   }
 
@@ -306,7 +508,17 @@ export default function AppShell() {
       setSavingProfile(true);
       setUserProfile(nextProfile);
       setConfig(nextConfig);
+      setRunForm((prev) => ({
+        ...prev,
+        receiver: nextProfile.receiver,
+        description: nextProfile.focus,
+      }));
       window.localStorage.setItem("ideer.user", JSON.stringify(nextProfile));
+      await emitUserProfileChange(nextProfile);
+      if (desktopWindow) {
+        await saveDesktopConfig(nextConfig);
+        await emitConfigChange(nextConfig);
+      }
       if (backendHealthy) {
         await saveConfig(nextConfig);
       }
@@ -331,6 +543,21 @@ export default function AppShell() {
       setConnectionTestResult({ kind: "error", message: getErrorMessage(error) });
     } finally {
       setTestingConnection(false);
+    }
+  }
+
+  async function handleTestSmtpConnection() {
+    try {
+      if (!config.smtp_server.trim()) {
+        throw new Error("请先填写 SMTP Server。");
+      }
+      setTestingSmtpConnection(true);
+      const result = await testSmtpConnection(config.smtp_server, config.smtp_port);
+      setSmtpTestResult({ kind: "success", message: result });
+    } catch (error) {
+      setSmtpTestResult({ kind: "error", message: getErrorMessage(error) });
+    } finally {
+      setTestingSmtpConnection(false);
     }
   }
 
@@ -390,8 +617,21 @@ export default function AppShell() {
   }), [copy, runForm.sources, theme]);
   const avatarMap = useMemo(() => Object.fromEntries(AVATARS.map((item) => [item.key, item.src])) as Record<AvatarId, string>, []);
   const sidebarName = userProfile.name || copy.user.fallbackName;
-  const sidebarFocus = userProfile.focus || copy.user.fallbackFocus;
+  const interestSummary = useMemo(() => {
+    const tags = parseInterestSummary(config.description || userProfile.focus);
+    const preview = tags.positive.slice(0, 2).join(" · ") || userProfile.focus || copy.user.fallbackFocus;
+    const extra = tags.positive.length > 2 ? ` +${tags.positive.length - 2}` : "";
+    const negative = tags.negative.length > 0 ? ` / -${tags.negative.length}` : "";
+    return `${preview}${extra}${negative}`;
+  }, [config.description, copy.user.fallbackFocus, userProfile.focus]);
   const commonProps = { backendHealthy, loadingData, errorText, statusText, copy };
+  const runDisabledReason = !backendHealthy
+    ? copy.home.runBlockedBackend
+    : runState === "running"
+      ? copy.home.runBlockedRunning
+      : runForm.sources.length === 0
+        ? copy.home.runBlockedSources
+        : "";
 
   if (panelWindowMode && forcedTab) {
     return (
@@ -423,10 +663,13 @@ export default function AppShell() {
           contributors={aboutInfo.contributors}
           testingConnection={testingConnection}
           connectionTestResult={connectionTestResult}
+          testingSmtpConnection={testingSmtpConnection}
+          smtpTestResult={smtpTestResult}
           languagePreference={languagePreference}
           themePreference={themePreference}
           onChangeLanguage={setLanguagePreference}
           onChangeTheme={setThemePreference}
+          onTestSmtpConnection={handleTestSmtpConnection}
         />
       </div>
     );
@@ -444,20 +687,20 @@ export default function AppShell() {
           </nav>
           <div className="sidebar-footer">
             <div className="user-dock">
-              <div className="user-card">
+              <button type="button" className="user-card" onClick={() => openControlPanel("profile")}>
                 <img src={avatarMap[userProfile.avatar]} alt={sidebarName} className="user-avatar" />
                 <span className="user-meta">
                   <strong>{sidebarName}</strong>
-                  <span>{sidebarFocus}</span>
+                  <span>{interestSummary}</span>
                 </span>
-              </div>
-              <button title={copy.home.openSettings} className="menu-button" onClick={() => openControlPanel("profile")}><FontAwesomeIcon icon={faBars} /></button>
+                <span className="menu-button inline" aria-hidden="true"><FontAwesomeIcon icon={faBars} /></span>
+              </button>
             </div>
           </div>
         </aside>
 
         <main className="workspace">
-          {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} onOpenSettings={() => openControlPanel("profile")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
+          {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} comingSoonSources={COMING_SOON_SOURCES} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} runDisabledReason={runDisabledReason} savingInterestDescription={savingInterestDescription} onOpenSettings={() => openControlPanel("profile")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onSaveInterestDescription={persistInterestDescription} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
           {activeView === "library" && <LibraryView backendHealthy={backendHealthy} history={history} selectedResult={selectedResult} historyLoading={historyLoading} onRefresh={refreshHistoryList} onSelect={openHistory} copy={copy} />}
         </main>
 
@@ -496,10 +739,13 @@ export default function AppShell() {
           contributors={aboutInfo.contributors}
           testingConnection={testingConnection}
           connectionTestResult={connectionTestResult}
+          testingSmtpConnection={testingSmtpConnection}
+          smtpTestResult={smtpTestResult}
           languagePreference={languagePreference}
           themePreference={themePreference}
           onChangeLanguage={setLanguagePreference}
           onChangeTheme={setThemePreference}
+          onTestSmtpConnection={handleTestSmtpConnection}
         /> : null}
       </div>
     </div>
@@ -511,7 +757,38 @@ function delay(ms: number) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "发生未知错误";
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    const maybeMessage = Reflect.get(error, "message");
+    if (typeof maybeMessage === "string" && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+    const maybeError = Reflect.get(error, "error");
+    if (typeof maybeError === "string" && maybeError.trim()) {
+      return maybeError;
+    }
+    const maybeCode = Reflect.get(error, "code");
+    try {
+      return JSON.stringify(
+        {
+          ...(typeof maybeCode === "string" || typeof maybeCode === "number" ? { code: maybeCode } : {}),
+          ...(maybeMessage ? { message: maybeMessage } : {}),
+          ...(maybeError ? { error: maybeError } : {}),
+          raw: error,
+        },
+        null,
+        2,
+      );
+    } catch {
+      // fall through
+    }
+  }
+  return "发生未知错误";
 }
 
 function readPreference<T extends string>(key: string, fallback: T): T {

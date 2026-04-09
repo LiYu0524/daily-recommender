@@ -29,6 +29,7 @@ const SOURCE_OPTIONS: Array<{ key: SourceName; label: string; description: strin
 ];
 
 const DEFAULT_CONFIG: ConfigData = {
+  desktop_python_path: "",
   provider: "openai",
   model: "gpt-4o-mini",
   base_url: "",

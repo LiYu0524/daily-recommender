@@ -30,6 +30,7 @@ export interface UserProfile {
 }
 
 export interface ConfigData {
+  desktop_python_path: string;
   provider: string;
   model: string;
   base_url: string;
