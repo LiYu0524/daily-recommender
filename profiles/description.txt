@@ -1,1 +1,11 @@
-Agent Safety
+I am working on the research area of safety and natural language processing.
+Specifically, I am interested in the following fields:
+1. Agent - LLM-based agents, tool use, multi-step reasoning, agentic workflows, autonomous systems
+2. Safety - AI safety, alignment, jailbreak, red-teaming, guardrails, RLHF, harmful content detection
+3. Trustworthy - trustworthy AI, robustness, fairness, interpretability, hallucination, uncertainty
+
+I'm not interested in the following fields:
+
+
+IMPORTANT: When generating the summary, please organize the content BY EACH of my three interest directions above.
+For each direction, summarize the most relevant items separately, so I can quickly see what's new in each area.
