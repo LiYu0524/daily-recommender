@@ -845,15 +845,16 @@ def legacy_admin_web_ui():
 
 if __name__ == "__main__":
     import uvicorn
+    port = int(os.getenv("PORT", "8090"))
 
     print(f"""
 ╔════════════════════════════════════════════════════════╗
 ║          Daily Recommender Web Server                  ║
 ╠════════════════════════════════════════════════════════╣
-║  Public UI: http://localhost:8090/                    ║
-║  Admin UI:  http://localhost:8090/admin               ║
-║  API Docs:  http://localhost:8090/docs                ║
+║  Public UI: http://localhost:{port}/                    ║
+║  Admin UI:  http://localhost:{port}/admin               ║
+║  API Docs:  http://localhost:{port}/docs                ║
 ╚════════════════════════════════════════════════════════╝
     """)
 
-    uvicorn.run(app, host="0.0.0.0", port=8090)
+    uvicorn.run(app, host="0.0.0.0", port=port)
