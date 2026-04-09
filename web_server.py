@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import locale
+import mimetypes
 import re
 import sys
 import tempfile
@@ -33,6 +34,8 @@ ENV_FILE = PROJECT_ROOT / ".env"
 PUBLIC_UI_FILE = PROJECT_ROOT / "public-web-ui.html"
 ADMIN_UI_FILE = PROJECT_ROOT / "web-ui.html"
 DESKTOP_UI_FILE = PROJECT_ROOT / "desktop-ui.html"
+CLIENT_DIST_DIR = PROJECT_ROOT / "client" / "dist"
+CLIENT_DIST_INDEX_FILE = CLIENT_DIST_DIR / "index.html"
 DESCRIPTION_FILE = PROJECT_ROOT / "profiles" / "description.txt"
 RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "researcher_profile.md"
 TWITTER_ACCOUNTS_FILE = PROJECT_ROOT / "profiles" / "x_accounts.txt"
@@ -207,6 +210,17 @@ def _append_arg(cmd: list[str], flag: str, value: str | int | float | None) -> N
     if value in (None, ""):
         return
     cmd.extend([flag, str(value)])
+
+
+def _resolve_client_dist_path(relative_path: str) -> Path | None:
+    if not CLIENT_DIST_DIR.exists():
+        return None
+
+    candidate = (CLIENT_DIST_DIR / relative_path).resolve()
+    dist_root = CLIENT_DIST_DIR.resolve()
+    if candidate != dist_root and dist_root not in candidate.parents:
+        return None
+    return candidate
 
 
 def _merge_unique_strings(*groups: list[str]) -> list[str]:
@@ -801,7 +815,25 @@ def admin_web_ui():
 
 @app.get("/desktop")
 def desktop_web_ui():
+    if CLIENT_DIST_INDEX_FILE.exists():
+        return FileResponse(CLIENT_DIST_INDEX_FILE)
     return FileResponse(DESKTOP_UI_FILE)
+
+
+@app.get("/desktop/{asset_path:path}")
+def desktop_client_asset(asset_path: str):
+    if CLIENT_DIST_INDEX_FILE.exists():
+        resolved = _resolve_client_dist_path(asset_path)
+        if resolved and resolved.is_file():
+            media_type, _ = mimetypes.guess_type(str(resolved))
+            return FileResponse(resolved, media_type=media_type)
+
+        if asset_path and "." not in Path(asset_path).name:
+            return FileResponse(CLIENT_DIST_INDEX_FILE)
+
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    return JSONResponse({"error": "Desktop client build not found"}, status_code=404)
 
 
 @app.get("/web-ui.html")
