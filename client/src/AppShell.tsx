@@ -74,6 +74,19 @@ type ViewName = "home" | "library";
 type RunState = "idle" | "running" | "done" | "error";
 type ControlPanel = "none" | "settings";
 type SettingsTab = "profile" | "preferences" | "subscriptions" | "mail" | "info";
+type ComingSoonSourceKey = "wos" | "cnki" | "wechat" | "scholar";
+type StatusState =
+  | { kind: "connecting" }
+  | { kind: "waitingDesktop" }
+  | { kind: "waitingWeb" }
+  | { kind: "connected" }
+  | { kind: "backendStarted" }
+  | { kind: "backendStopped" }
+  | { kind: "configSaved"; localOnly: boolean }
+  | { kind: "profileSaved" }
+  | { kind: "runDone"; date: string }
+  | { kind: "runExited" }
+  | { kind: "socketError" };
 
 const DEFAULT_CONFIG: ConfigData = {
   desktop_python_path: "",
@@ -121,12 +134,7 @@ const SOURCES = [
   { key: "arxiv", label: "arXiv", description: "新论文抓取与筛选", iconLight: iconArxiv, iconDark: iconArxiv, iconActive: iconArxiv },
 ] satisfies Array<{ key: SourceName; label: string; description: string; iconLight: string; iconDark: string; iconActive: string }>;
 
-const COMING_SOON_SOURCES = [
-  { key: "wos", label: "Web of Science" },
-  { key: "cnki", label: "知网" },
-  { key: "wechat", label: "微信公众号" },
-  { key: "scholar", label: "Google Scholar" },
-] as const;
+const COMING_SOON_SOURCE_KEYS = ["wos", "cnki", "wechat", "scholar"] as const satisfies ReadonlyArray<ComingSoonSourceKey>;
 
 function parseInterestSummary(value: string) {
   const raw = value.trim();
@@ -169,6 +177,9 @@ export default function AppShell() {
   const socketRef = useRef<WebSocket | null>(null);
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(() => readPreference("ideer.language", "system"));
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readPreference("ideer.theme", "system"));
+  const language = resolveLanguage(languagePreference);
+  const theme = resolveTheme(themePreference);
+  const copy = COPY[language];
   const [activeView, setActiveView] = useState<ViewName>("home");
   const [controlPanel, setControlPanel] = useState<ControlPanel>("none");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("profile");
@@ -185,7 +196,7 @@ export default function AppShell() {
   const [logs, setLogs] = useState<string[]>([]);
   const [runFiles, setRunFiles] = useState<string[]>([]);
   const [runState, setRunState] = useState<RunState>("idle");
-  const [statusText, setStatusText] = useState("等待连接服务");
+  const [status, setStatus] = useState<StatusState>({ kind: "connecting" });
   const [historyLoading, setHistoryLoading] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [savingInterestDescription, setSavingInterestDescription] = useState(false);
@@ -195,9 +206,7 @@ export default function AppShell() {
   const [testingSmtpConnection, setTestingSmtpConnection] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ kind: "idle" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
   const [errorText, setErrorText] = useState("");
-  const language = resolveLanguage(languagePreference);
-  const theme = resolveTheme(themePreference);
-  const copy = COPY[language];
+  const statusText = resolveStatusText(copy, status);
 
   useEffect(() => {
     void initialize();
@@ -301,7 +310,7 @@ export default function AppShell() {
       await hydrate();
     } else {
       setLoadingData(false);
-      setStatusText(isTauriDesktop() ? copy.statusWaitingDesktop : copy.statusWaitingWeb);
+      setStatus({ kind: isTauriDesktop() ? "waitingDesktop" : "waitingWeb" });
     }
   }
 
@@ -364,10 +373,10 @@ export default function AppShell() {
         focus: configData.description,
       }));
       setHistory(historyData);
-      setStatusText(copy.statusConnected);
+      setStatus({ kind: "connected" });
       setErrorText("");
     } catch (error) {
-      setErrorText(getErrorMessage(error));
+      setErrorText(getErrorMessage(error, copy));
     } finally {
       setLoadingData(false);
     }
@@ -377,31 +386,31 @@ export default function AppShell() {
     try {
       setStartingBackend(true);
       setErrorText("");
-      setLogs(["[iDeer] 正在启动本地服务..."]);
+      setLogs([copy.runtime.backendStartingLog]);
       await startManagedBackend();
       for (let i = 0; i < 12; i += 1) {
         if (await refreshHealth()) {
           await hydrate();
-          setStatusText(copy.statusBackendStarted);
-          setLogs((prev) => [...prev, "[iDeer] 本地服务已启动。"]);
+          setStatus({ kind: "backendStarted" });
+          setLogs((prev) => [...prev, copy.runtime.backendStartedLog]);
           return;
         }
         await delay(1000);
       }
       const backendLog = await readManagedBackendLog().catch(() => "");
       const message = backendLog
-        ? `本地服务进程已尝试启动，但健康检查仍未通过。\n\n后端日志：\n${backendLog}`
-        : "本地服务进程已尝试启动，但健康检查仍未通过。请确认 Python 解释器路径正确，且该环境已安装 FastAPI、Uvicorn、Pydantic。";
+        ? `${copy.runtime.backendHealthCheckFailed}\n\n${copy.runtime.backendLogLabel}\n${backendLog}`
+        : `${copy.runtime.backendHealthCheckFailed} ${copy.runtime.backendHealthCheckHint}`;
       setErrorText(message);
-      setLogs((prev) => [...prev, `[iDeer] 启动失败\n${message}`]);
+      setLogs((prev) => [...prev, `${copy.runtime.backendStartFailedLog}\n${message}`]);
     } catch (error) {
       const backendLog = await readManagedBackendLog().catch(() => "");
-      const errorMessage = getErrorMessage(error);
+      const errorMessage = getErrorMessage(error, copy);
       const message = backendLog && !errorMessage.includes(backendLog)
-        ? `${errorMessage}\n\n后端日志：\n${backendLog}`
+        ? `${errorMessage}\n\n${copy.runtime.backendLogLabel}\n${backendLog}`
         : errorMessage;
       setErrorText(message);
-      setLogs((prev) => [...prev, `[iDeer] 启动失败\n${message}`]);
+      setLogs((prev) => [...prev, `${copy.runtime.backendStartFailedLog}\n${message}`]);
     } finally {
       setStartingBackend(false);
     }
@@ -410,7 +419,7 @@ export default function AppShell() {
   async function handleStopBackend() {
     await stopManagedBackend();
     setBackendHealthy(false);
-    setStatusText(copy.statusBackendStopped);
+    setStatus({ kind: "backendStopped" });
   }
 
   async function refreshHistoryList() {
@@ -419,7 +428,7 @@ export default function AppShell() {
       setHistoryLoading(true);
       setHistory(await getHistory());
     } catch (error) {
-      setErrorText(getErrorMessage(error));
+      setErrorText(getErrorMessage(error, copy));
     } finally {
       setHistoryLoading(false);
     }
@@ -452,9 +461,9 @@ export default function AppShell() {
       if (backendHealthy) {
         await saveConfig(config);
       }
-      setStatusText(copy.statusConfigSaved + (backendHealthy ? "" : "（已保存到本地客户端配置）"));
+      setStatus({ kind: "configSaved", localOnly: !backendHealthy });
     } catch (error) {
-      setErrorText(getErrorMessage(error));
+      setErrorText(getErrorMessage(error, copy));
     } finally {
       setSavingConfig(false);
     }
@@ -484,9 +493,9 @@ export default function AppShell() {
       if (backendHealthy) {
         await saveConfig(nextConfig);
       }
-      setStatusText(copy.statusConfigSaved + (backendHealthy ? "" : "（已保存到本地客户端配置）"));
+      setStatus({ kind: "configSaved", localOnly: !backendHealthy });
     } catch (error) {
-      setErrorText(getErrorMessage(error));
+      setErrorText(getErrorMessage(error, copy));
     } finally {
       setSavingInterestDescription(false);
     }
@@ -522,9 +531,9 @@ export default function AppShell() {
       if (backendHealthy) {
         await saveConfig(nextConfig);
       }
-      setStatusText(copy.settings.profileSaved);
+      setStatus({ kind: "profileSaved" });
     } catch (error) {
-      setErrorText(getErrorMessage(error));
+      setErrorText(getErrorMessage(error, copy));
     } finally {
       setSavingProfile(false);
     }
@@ -540,7 +549,7 @@ export default function AppShell() {
       });
       setConnectionTestResult({ kind: "success", message: result.message });
     } catch (error) {
-      setConnectionTestResult({ kind: "error", message: getErrorMessage(error) });
+      setConnectionTestResult({ kind: "error", message: getErrorMessage(error, copy) });
     } finally {
       setTestingConnection(false);
     }
@@ -549,13 +558,13 @@ export default function AppShell() {
   async function handleTestSmtpConnection() {
     try {
       if (!config.smtp_server.trim()) {
-        throw new Error("请先填写 SMTP Server。");
+        throw new Error(copy.runtime.smtpServerRequired);
       }
       setTestingSmtpConnection(true);
       const result = await testSmtpConnection(config.smtp_server, config.smtp_port);
       setSmtpTestResult({ kind: "success", message: result });
     } catch (error) {
-      setSmtpTestResult({ kind: "error", message: getErrorMessage(error) });
+      setSmtpTestResult({ kind: "error", message: getErrorMessage(error, copy) });
     } finally {
       setTestingSmtpConnection(false);
     }
@@ -569,7 +578,7 @@ export default function AppShell() {
       try {
         await openControlPanelWindow(tab);
       } catch (error) {
-        setErrorText(getErrorMessage(error));
+        setErrorText(getErrorMessage(error, copy));
       }
       return;
     }
@@ -589,7 +598,7 @@ export default function AppShell() {
           const done = message as RunCompleteMessage;
           setRunFiles(done.files);
           setRunState(done.success ? "done" : "error");
-          setStatusText(done.success ? copy.statusRunDone(done.date) : copy.statusRunExited);
+          setStatus(done.success ? { kind: "runDone", date: done.date } : { kind: "runExited" });
           void refreshHistoryList();
           return;
         }
@@ -598,7 +607,7 @@ export default function AppShell() {
       },
       onError() {
         setRunState("error");
-        setStatusText(copy.statusSocketError);
+        setStatus({ kind: "socketError" });
       },
       onClose() {
         socketRef.current = null;
@@ -615,6 +624,10 @@ export default function AppShell() {
       icon: selected ? item.iconActive : theme === "dark" ? item.iconDark : item.iconLight,
     };
   }), [copy, runForm.sources, theme]);
+  const comingSoonSources = useMemo(
+    () => COMING_SOON_SOURCE_KEYS.map((key) => ({ key, label: copy.comingSoonSources[key] })),
+    [copy],
+  );
   const avatarMap = useMemo(() => Object.fromEntries(AVATARS.map((item) => [item.key, item.src])) as Record<AvatarId, string>, []);
   const sidebarName = userProfile.name || copy.user.fallbackName;
   const interestSummary = useMemo(() => {
@@ -677,7 +690,7 @@ export default function AppShell() {
 
   return (
     <div className={showCustomTitleBar ? "desktop-root" : "desktop-root native-frame"}>
-      {showCustomTitleBar ? <TitleBar backendHealthy={backendHealthy} statusText={statusText} previewBadge={copy.previewBadge} title={copy.desktopTitle} /> : null}
+      {showCustomTitleBar ? <TitleBar backendHealthy={backendHealthy} statusText={statusText} previewBadge={copy.previewBadge} title={copy.desktopTitle} copy={copy} /> : null}
       <div className="desktop-shell">
         <aside className="app-sidebar">
           <div className="brand-block text-only"><div><h1>{copy.appTitle}</h1><p className="brand-subtitle">{copy.desktopTitle}</p></div></div>
@@ -700,7 +713,7 @@ export default function AppShell() {
         </aside>
 
         <main className="workspace">
-          {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} comingSoonSources={COMING_SOON_SOURCES} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} runDisabledReason={runDisabledReason} savingInterestDescription={savingInterestDescription} onOpenSettings={() => openControlPanel("profile")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onSaveInterestDescription={persistInterestDescription} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
+          {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} comingSoonSources={comingSoonSources} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} runDisabledReason={runDisabledReason} savingInterestDescription={savingInterestDescription} onOpenSettings={() => openControlPanel("profile")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onSaveInterestDescription={persistInterestDescription} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
           {activeView === "library" && <LibraryView backendHealthy={backendHealthy} history={history} selectedResult={selectedResult} historyLoading={historyLoading} onRefresh={refreshHistoryList} onSelect={openHistory} copy={copy} />}
         </main>
 
@@ -710,7 +723,7 @@ export default function AppShell() {
           onClick={() => openExternalUrl(aboutInfo.github_url || meta?.github_url || DEFAULT_ABOUT_INFO.github_url)}
         >
           <FontAwesomeIcon icon={faStar} />
-          <span>Star</span>
+          <span>{copy.info.star}</span>
         </button>
 
         {controlPanel === "settings" ? <ControlCenter
@@ -756,7 +769,36 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function getErrorMessage(error: unknown) {
+function resolveStatusText(copy: typeof COPY.zh | typeof COPY.en, status: StatusState) {
+  switch (status.kind) {
+    case "connecting":
+      return copy.statusConnecting;
+    case "waitingDesktop":
+      return copy.statusWaitingDesktop;
+    case "waitingWeb":
+      return copy.statusWaitingWeb;
+    case "connected":
+      return copy.statusConnected;
+    case "backendStarted":
+      return copy.statusBackendStarted;
+    case "backendStopped":
+      return copy.statusBackendStopped;
+    case "configSaved":
+      return status.localOnly ? copy.statusConfigSavedLocal : copy.statusConfigSaved;
+    case "profileSaved":
+      return copy.settings.profileSaved;
+    case "runDone":
+      return copy.statusRunDone(status.date);
+    case "runExited":
+      return copy.statusRunExited;
+    case "socketError":
+      return copy.statusSocketError;
+    default:
+      return copy.statusConnecting;
+  }
+}
+
+function getErrorMessage(error: unknown, copy: typeof COPY.zh | typeof COPY.en) {
   if (error instanceof Error) {
     return error.message;
   }
@@ -788,7 +830,7 @@ function getErrorMessage(error: unknown) {
       // fall through
     }
   }
-  return "发生未知错误";
+  return copy.common.unknownError;
 }
 
 function readPreference<T extends string>(key: string, fallback: T): T {

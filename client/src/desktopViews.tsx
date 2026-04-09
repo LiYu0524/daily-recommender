@@ -1,16 +1,24 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import type { IconDefinition } from "@fortawesome/fontawesome-svg-core";
 import {
+  faBolt,
   faCircleInfo,
   faCircleQuestion,
   faCompress,
+  faFileLines,
+  faFloppyDisk,
   faGear,
+  faInbox,
+  faLayerGroup,
+  faLightbulb,
   faMinus,
   faMoon,
   faPalette,
+  faPlay,
   faRotate,
   faSquare,
+  faStop,
   faSun,
   faUpRightFromSquare,
   faXmark,
@@ -28,7 +36,7 @@ function uniqueTags(items: string[]) {
 }
 
 function splitInterestLine(value: string) {
-  return uniqueTags(value.split(/[|,，;\n]/g));
+  return uniqueTags(value.split(/[|,，;；、\n]/g));
 }
 
 function parseInterestDescription(value: string): InterestTags {
@@ -85,7 +93,18 @@ function serializeInterestDescription(tags: InterestTags) {
   return lines.join("\n");
 }
 
-export function TitleBar(props: { backendHealthy: boolean; statusText: string; previewBadge: string; title: string }) {
+function ControlButtonContent(props: { icon: IconDefinition; label: string }) {
+  return (
+    <>
+      <span className="button-icon" aria-hidden="true">
+        <FontAwesomeIcon icon={props.icon} />
+      </span>
+      <span className="button-label">{props.label}</span>
+    </>
+  );
+}
+
+export function TitleBar(props: { backendHealthy: boolean; statusText: string; previewBadge: string; title: string; copy: AppCopy }) {
   const desktop = isTauriDesktop();
   const [isMaximized, setIsMaximized] = useState(false);
 
@@ -119,17 +138,17 @@ export function TitleBar(props: { backendHealthy: boolean; statusText: string; p
         {!desktop ? <span className="titlebar-badge">{props.previewBadge}</span> : null}
         {desktop && (
           <div className="window-controls">
-            <button className="window-control minimize" aria-label="Minimize window" onClick={() => void minimizeWindow()}>
+            <button className="window-control minimize" aria-label={props.copy.windowControls.minimize} onClick={() => void minimizeWindow()}>
               <FontAwesomeIcon icon={faMinus} />
             </button>
             <button
               className="window-control maximize"
-              aria-label={isMaximized ? "Restore window" : "Maximize window"}
+              aria-label={isMaximized ? props.copy.windowControls.restore : props.copy.windowControls.maximize}
               onClick={() => void toggleWindowMaximize()}
             >
               <FontAwesomeIcon icon={isMaximized ? faCompress : faSquare} />
             </button>
-            <button className="window-control close" aria-label="Close window" onClick={() => void closeWindow()}>
+            <button className="window-control close" aria-label={props.copy.windowControls.close} onClick={() => void closeWindow()}>
               <FontAwesomeIcon icon={faXmark} />
             </button>
           </div>
@@ -195,7 +214,7 @@ export function ControlCenter(props: {
         {activeTab === "profile" ? <section className="control-section">
           <div className="control-section-title"><FontAwesomeIcon icon={faGear} /> <span>{props.copy.settings.profile}</span></div>
           <div className="profile-card">
-            <img src={props.avatars.find((item) => item.key === props.userProfile.avatar)?.src} alt={props.userProfile.name || "iDeer user"} className="profile-avatar-large" />
+            <img src={props.avatars.find((item) => item.key === props.userProfile.avatar)?.src} alt={props.userProfile.name || props.copy.user.fallbackName} className="profile-avatar-large" />
             <div className="profile-copy">
               <strong>{props.userProfile.name || props.copy.user.fallbackName}</strong>
               <p>{props.userProfile.focus || props.copy.user.fallbackFocus}</p>
@@ -285,7 +304,7 @@ export function ControlCenter(props: {
         {activeTab === "info" ? <section className="control-section">
           <div className="control-section-title"><FontAwesomeIcon icon={faCircleInfo} /> <span>{props.copy.info.title}</span></div>
           <div className="info-simple">
-            <img src={props.appIcon} alt="iDeer" className="info-icon large" />
+            <img src={props.appIcon} alt={props.copy.appTitle} className="info-icon large" />
             <strong className="info-brand">iDeer</strong>
             <p className="info-slogan">{props.copy.info.slogan}</p>
             <p className="info-disclaimer">{props.copy.info.disclaimer}</p>
@@ -299,7 +318,7 @@ export function ControlCenter(props: {
                     href={resolveContributorGithubLink(contributor)}
                     target="_blank"
                     rel="noreferrer"
-                    aria-label={`Open ${contributor.name}'s GitHub profile`}
+                    aria-label={props.copy.info.contributorGithubAria(contributor.name)}
                     onClick={(event) => {
                       event.preventDefault();
                       openExternalUrl(resolveContributorGithubLink(contributor));
@@ -373,6 +392,8 @@ export function HomeView(props: {
   const [positiveInput, setPositiveInput] = useState("");
   const [negativeInput, setNegativeInput] = useState("");
   const [interestTags, setInterestTags] = useState<InterestTags>(() => parseInterestDescription(props.runForm.description));
+  const sourcePanelRef = useRef<HTMLElement | null>(null);
+  const logsPanelRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!showComingSoonToast) {
@@ -385,6 +406,33 @@ export function HomeView(props: {
   useEffect(() => {
     setInterestTags(parseInterestDescription(props.runForm.description));
   }, [props.runForm.description]);
+
+  useLayoutEffect(() => {
+    const sourcePanel = sourcePanelRef.current;
+    const logsPanel = logsPanelRef.current;
+    if (!sourcePanel || !logsPanel) {
+      return;
+    }
+
+    const syncHeight = () => {
+      logsPanel.style.height = `${sourcePanel.offsetHeight}px`;
+    };
+
+    syncHeight();
+
+    const observer = new ResizeObserver(() => {
+      syncHeight();
+    });
+
+    observer.observe(sourcePanel);
+    window.addEventListener("resize", syncHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", syncHeight);
+      logsPanel.style.height = "";
+    };
+  }, [interestTags, props.errorText, props.loadingData, props.logs.length, props.recentHistory.length, props.runDisabledReason, props.runFiles.length]);
 
   function toggleDeliveryMode(target: "source" | "combined") {
     props.onChangeRunForm("delivery_mode", target === "source" ? "source_emails" : "combined_report");
@@ -423,83 +471,293 @@ export function HomeView(props: {
     });
   }
 
-  return <section className="page-grid">
-    {props.errorText && <div className="notice error">{props.errorText}</div>}
-    {props.runDisabledReason ? <div className="notice info">{props.runDisabledReason}</div> : null}
-    {showComingSoonToast ? <div className="coming-soon-toast">Coming Soon</div> : null}
-    <div className="home-grid top">
-      <section className="content-panel">
-        <div className="section-heading">
-          <div><h3>{props.copy.home.sources}</h3></div>
-          <div className="metric-actions">
-            {!props.backendHealthy && isTauriDesktop() && <button className="secondary-action" onClick={() => void props.onStartBackend()} disabled={props.startingBackend}>{props.startingBackend ? props.copy.home.startingBackend : props.copy.home.startBackend}</button>}
-            {props.backendHealthy && <button className="secondary-action" onClick={() => void props.onRefresh()}>{props.loadingData ? props.copy.home.refreshing : props.copy.home.refresh}</button>}
-            {props.backendHealthy && isTauriDesktop() && <button className="ghost-action" onClick={() => void props.onStopBackend()}>{props.copy.home.stopBackend}</button>}
-            <button className="primary-action" onClick={props.onRun} disabled={!props.backendHealthy || props.runState === "running" || props.runForm.sources.length === 0}>{props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run}</button>
-          </div>
-        </div>
-        <div className="source-picker-grid">
-          {props.sources.map((source) => <label key={source.key} data-source={source.key} className={source.selected ? "source-picker-card active" : "source-picker-card"}><input type="checkbox" checked={source.selected} onChange={() => props.onToggleSource(source.key)} /><img src={source.icon} alt={source.label} className="source-icon large" /><div><strong>{source.label}</strong><p>{source.description}</p></div></label>)}
-          {props.comingSoonSources.map((source) => <button key={source.key} type="button" className="source-picker-card coming-soon clickable" onClick={() => setShowComingSoonToast(true)}><div className="coming-soon-dot" /><div><strong>{source.label}</strong><p>Coming Soon</p></div></button>)}
-        </div>
-        <div className="form-grid two"><label className="form-field"><span>{props.copy.workbench.receiver}</span><input value={props.runForm.receiver} onChange={(event) => props.onChangeRunForm("receiver", event.target.value)} /></label><div className="form-field"><span>{props.copy.workbench.deliveryMode}</span><div className="segmented-toggle-group delivery-mode-control"><button type="button" data-mode="source" className={sourceWiseSelected ? "segmented-toggle-button active" : "segmented-toggle-button"} onClick={() => toggleDeliveryMode("source")}>{props.copy.workbench.sourceEmails}</button><button type="button" data-mode="combined" className={combinedSelected ? "segmented-toggle-button active" : "segmented-toggle-button"} onClick={() => toggleDeliveryMode("combined")}>{props.copy.workbench.combinedReport}</button></div></div></div>
-        <div className="feature-toggle-row">
-          <button type="button" className={props.runForm.generate_report ? "feature-toggle-button active" : "feature-toggle-button"} onClick={() => props.onChangeRunForm("generate_report", !props.runForm.generate_report)}>{props.copy.workbench.report}</button>
-          <button type="button" className={props.runForm.generate_ideas ? "feature-toggle-button active" : "feature-toggle-button"} onClick={() => props.onChangeRunForm("generate_ideas", !props.runForm.generate_ideas)}>{props.copy.workbench.ideas}</button>
-          <button type="button" className={props.runForm.save ? "feature-toggle-button active" : "feature-toggle-button"} onClick={() => props.onChangeRunForm("save", !props.runForm.save)}>{props.copy.workbench.save}</button>
-        </div>
-        <div className="form-field">
-          <span>{props.copy.workbench.description}</span>
-          <div className="interest-tag-editor">
-            <div className="interest-tag-grid">
-              <section className="interest-tag-panel positive">
-                <div className="interest-tag-header">
-                  <strong>{props.copy.workbench.positiveTags}</strong>
-                </div>
-                <div className="interest-chip-list">
-                  {interestTags.positive.length === 0 ? <span className="interest-chip empty">+</span> : interestTags.positive.map((tag) => <button key={`pos-${tag}`} type="button" className="interest-chip positive" onClick={() => removeTag("positive", tag)}>{tag}<FontAwesomeIcon icon={faXmark} /></button>)}
-                </div>
-                <div className="interest-input-row">
-                  <input value={positiveInput} placeholder={props.copy.workbench.positivePlaceholder} onChange={(event) => setPositiveInput(event.target.value)} onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addTag("positive");
-                    }
-                  }} />
-                  <button type="button" className="secondary-action" onClick={() => addTag("positive")}>{props.copy.workbench.addTag}</button>
-                </div>
-              </section>
-              <section className="interest-tag-panel negative">
-                <div className="interest-tag-header">
-                  <strong>{props.copy.workbench.negativeTags}</strong>
-                </div>
-                <div className="interest-chip-list">
-                  {interestTags.negative.length === 0 ? <span className="interest-chip empty">-</span> : interestTags.negative.map((tag) => <button key={`neg-${tag}`} type="button" className="interest-chip negative" onClick={() => removeTag("negative", tag)}>{tag}<FontAwesomeIcon icon={faXmark} /></button>)}
-                </div>
-                <div className="interest-input-row">
-                  <input value={negativeInput} placeholder={props.copy.workbench.negativePlaceholder} onChange={(event) => setNegativeInput(event.target.value)} onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      addTag("negative");
-                    }
-                  }} />
-                  <button type="button" className="secondary-action" onClick={() => addTag("negative")}>{props.copy.workbench.addTag}</button>
-                </div>
-              </section>
+  return (
+    <section className="page-grid">
+      {props.errorText && <div className="notice error">{props.errorText}</div>}
+      {props.runDisabledReason ? <div className="notice info">{props.runDisabledReason}</div> : null}
+      {showComingSoonToast ? <div className="coming-soon-toast">{props.copy.home.comingSoonToast}</div> : null}
+
+      <div className="home-grid top">
+        <section ref={sourcePanelRef} className="content-panel">
+          <div className="section-heading">
+            <div>
+              <h3>{props.copy.home.sources}</h3>
             </div>
-            <div className="interest-save-row">
-              <button type="button" className="secondary-action" onClick={() => void props.onSaveInterestDescription(serializeInterestDescription(interestTags))} disabled={props.savingInterestDescription}>{props.savingInterestDescription ? props.copy.workbench.savingInterest : props.copy.workbench.saveInterest}</button>
+
+            <div className="metric-actions home-action-row">
+              {!props.backendHealthy && isTauriDesktop() ? (
+                <button
+                  className="secondary-action adaptive-button"
+                  onClick={() => void props.onStartBackend()}
+                  disabled={props.startingBackend}
+                  title={props.startingBackend ? props.copy.home.startingBackend : props.copy.home.startBackend}
+                  aria-label={props.startingBackend ? props.copy.home.startingBackend : props.copy.home.startBackend}
+                >
+                  <ControlButtonContent icon={faPlay} label={props.startingBackend ? props.copy.home.startingBackend : props.copy.home.startBackend} />
+                </button>
+              ) : null}
+
+              {props.backendHealthy ? (
+                <button
+                  className="secondary-action adaptive-button"
+                  onClick={() => void props.onRefresh()}
+                  title={props.loadingData ? props.copy.home.refreshing : props.copy.home.refresh}
+                  aria-label={props.loadingData ? props.copy.home.refreshing : props.copy.home.refresh}
+                >
+                  <ControlButtonContent icon={faRotate} label={props.loadingData ? props.copy.home.refreshing : props.copy.home.refresh} />
+                </button>
+              ) : null}
+
+              {props.backendHealthy && isTauriDesktop() ? (
+                <button
+                  className="ghost-action adaptive-button"
+                  onClick={() => void props.onStopBackend()}
+                  title={props.copy.home.stopBackend}
+                  aria-label={props.copy.home.stopBackend}
+                >
+                  <ControlButtonContent icon={faStop} label={props.copy.home.stopBackend} />
+                </button>
+              ) : null}
+
+              <button
+                className="primary-action adaptive-button"
+                onClick={props.onRun}
+                disabled={!props.backendHealthy || props.runState === "running" || props.runForm.sources.length === 0}
+                title={props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run}
+                aria-label={props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run}
+              >
+                <ControlButtonContent icon={faBolt} label={props.runState === "running" ? props.copy.workbench.running : props.copy.workbench.run} />
+              </button>
             </div>
           </div>
-        </div>
-      </section>
-      <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.logs}</h3><span className={`run-badge ${props.runState}`}>{props.runState}</span></div><div className="terminal-panel">{props.logs.length === 0 ? <div className="empty-terminal">{props.copy.workbench.logEmpty}</div> : props.logs.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}</div></section>
-    </div>
-    <div className="home-grid bottom">
-      <section className="content-panel"><div className="section-heading"><div><h3>{props.copy.home.recentRuns}</h3></div></div>{props.recentHistory.length === 0 ? <div className="empty-state">{props.copy.home.noHistory}</div> : <div className="history-compact-list">{props.recentHistory.map((entry) => <button key={entry.id} className="history-compact-item" onClick={() => void props.onOpenHistory(entry)}><strong>{entry.type}</strong><span>{entry.date}</span><span>{entry.items} items</span></button>)}</div>}</section>
-      <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.outputs}</h3><button className="secondary-action" onClick={() => void props.onRefreshHistory()} disabled={props.historyLoading}>{props.historyLoading ? props.copy.library.refreshing : props.copy.workbench.refreshHistory}</button></div>{props.runFiles.length === 0 ? <div className="empty-state">{props.copy.workbench.outputEmpty}</div> : <ul className="file-output-list">{props.runFiles.map((file) => <li key={file}>{file}</li>)}</ul>}</section>
-    </div>
-  </section>;
+
+          <div className="source-picker-grid">
+            {props.sources.map((source) => (
+              <label key={source.key} data-source={source.key} className={source.selected ? "source-picker-card active" : "source-picker-card"}>
+                <input type="checkbox" checked={source.selected} onChange={() => props.onToggleSource(source.key)} />
+                <img src={source.icon} alt={source.label} className="source-icon large" />
+                <div>
+                  <strong>{source.label}</strong>
+                  <p>{source.description}</p>
+                </div>
+              </label>
+            ))}
+
+            {props.comingSoonSources.map((source) => (
+              <button key={source.key} type="button" className="source-picker-card coming-soon clickable" onClick={() => setShowComingSoonToast(true)}>
+                <div className="coming-soon-dot" />
+                <div>
+                  <strong>{source.label}</strong>
+                  <p>{props.copy.home.comingSoon}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <div className="form-grid two">
+            <label className="form-field">
+              <span>{props.copy.workbench.receiver}</span>
+              <input value={props.runForm.receiver} onChange={(event) => props.onChangeRunForm("receiver", event.target.value)} />
+            </label>
+
+            <div className="form-field">
+              <span>{props.copy.workbench.deliveryMode}</span>
+              <div className="segmented-toggle-group delivery-mode-control">
+                <button
+                  type="button"
+                  data-mode="source"
+                  className={sourceWiseSelected ? "segmented-toggle-button adaptive-button active" : "segmented-toggle-button adaptive-button"}
+                  onClick={() => toggleDeliveryMode("source")}
+                  title={props.copy.workbench.sourceEmails}
+                  aria-label={props.copy.workbench.sourceEmails}
+                  aria-pressed={sourceWiseSelected}
+                >
+                  <ControlButtonContent icon={faInbox} label={props.copy.workbench.sourceEmails} />
+                </button>
+                <button
+                  type="button"
+                  data-mode="combined"
+                  className={combinedSelected ? "segmented-toggle-button adaptive-button active" : "segmented-toggle-button adaptive-button"}
+                  onClick={() => toggleDeliveryMode("combined")}
+                  title={props.copy.workbench.combinedReport}
+                  aria-label={props.copy.workbench.combinedReport}
+                  aria-pressed={combinedSelected}
+                >
+                  <ControlButtonContent icon={faLayerGroup} label={props.copy.workbench.combinedReport} />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="feature-toggle-row">
+            <button
+              type="button"
+              data-feature="report"
+              className={props.runForm.generate_report ? "feature-toggle-button adaptive-button active" : "feature-toggle-button adaptive-button"}
+              onClick={() => props.onChangeRunForm("generate_report", !props.runForm.generate_report)}
+              title={props.copy.workbench.report}
+              aria-label={props.copy.workbench.report}
+              aria-pressed={props.runForm.generate_report}
+            >
+              <ControlButtonContent icon={faFileLines} label={props.copy.workbench.report} />
+            </button>
+            <button
+              type="button"
+              data-feature="ideas"
+              className={props.runForm.generate_ideas ? "feature-toggle-button adaptive-button active" : "feature-toggle-button adaptive-button"}
+              onClick={() => props.onChangeRunForm("generate_ideas", !props.runForm.generate_ideas)}
+              title={props.copy.workbench.ideas}
+              aria-label={props.copy.workbench.ideas}
+              aria-pressed={props.runForm.generate_ideas}
+            >
+              <ControlButtonContent icon={faLightbulb} label={props.copy.workbench.ideas} />
+            </button>
+            <button
+              type="button"
+              data-feature="save"
+              className={props.runForm.save ? "feature-toggle-button adaptive-button active" : "feature-toggle-button adaptive-button"}
+              onClick={() => props.onChangeRunForm("save", !props.runForm.save)}
+              title={props.copy.workbench.save}
+              aria-label={props.copy.workbench.save}
+              aria-pressed={props.runForm.save}
+            >
+              <ControlButtonContent icon={faFloppyDisk} label={props.copy.workbench.save} />
+            </button>
+          </div>
+
+          <div className="form-field">
+            <span>{props.copy.workbench.description}</span>
+            <div className="interest-tag-editor">
+              <div className="interest-tag-grid">
+                <section className="interest-tag-panel positive">
+                  <div className="interest-tag-header">
+                    <strong>{props.copy.workbench.positiveTags}</strong>
+                  </div>
+                  <div className="interest-chip-list">
+                    {interestTags.positive.length === 0 ? (
+                      <span className="interest-chip empty">+</span>
+                    ) : (
+                      interestTags.positive.map((tag) => (
+                        <button key={`pos-${tag}`} type="button" className="interest-chip positive" onClick={() => removeTag("positive", tag)}>
+                          <span className="interest-chip-label">{tag}</span>
+                          <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="interest-input-row">
+                    <input
+                      value={positiveInput}
+                      placeholder={props.copy.workbench.positivePlaceholder}
+                      onChange={(event) => setPositiveInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addTag("positive");
+                        }
+                      }}
+                    />
+                    <button type="button" className="secondary-action" onClick={() => addTag("positive")}>
+                      {props.copy.workbench.addTag}
+                    </button>
+                  </div>
+                </section>
+
+                <section className="interest-tag-panel negative">
+                  <div className="interest-tag-header">
+                    <strong>{props.copy.workbench.negativeTags}</strong>
+                  </div>
+                  <div className="interest-chip-list">
+                    {interestTags.negative.length === 0 ? (
+                      <span className="interest-chip empty">-</span>
+                    ) : (
+                      interestTags.negative.map((tag) => (
+                        <button key={`neg-${tag}`} type="button" className="interest-chip negative" onClick={() => removeTag("negative", tag)}>
+                          <span className="interest-chip-label">{tag}</span>
+                          <FontAwesomeIcon icon={faXmark} />
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  <div className="interest-input-row">
+                    <input
+                      value={negativeInput}
+                      placeholder={props.copy.workbench.negativePlaceholder}
+                      onChange={(event) => setNegativeInput(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addTag("negative");
+                        }
+                      }}
+                    />
+                    <button type="button" className="secondary-action" onClick={() => addTag("negative")}>
+                      {props.copy.workbench.addTag}
+                    </button>
+                  </div>
+                </section>
+              </div>
+
+              <div className="interest-save-row">
+                <button type="button" className="secondary-action" onClick={() => void props.onSaveInterestDescription(serializeInterestDescription(interestTags))} disabled={props.savingInterestDescription}>
+                  {props.savingInterestDescription ? props.copy.workbench.savingInterest : props.copy.workbench.saveInterest}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section ref={logsPanelRef} className="content-panel home-logs-panel">
+          <div className="section-heading compact">
+            <h3>{props.copy.workbench.logs}</h3>
+            <span className={`run-badge ${props.runState}`}>{formatRunState(props.copy, props.runState)}</span>
+          </div>
+          <div className="terminal-panel">
+            {props.logs.length === 0 ? <div className="empty-terminal">{props.copy.workbench.logEmpty}</div> : props.logs.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}
+          </div>
+        </section>
+      </div>
+
+      <div className="home-grid bottom">
+        <section className="content-panel">
+          <div className="section-heading">
+            <div>
+              <h3>{props.copy.home.recentRuns}</h3>
+            </div>
+          </div>
+          {props.recentHistory.length === 0 ? (
+            <div className="empty-state">{props.copy.home.noHistory}</div>
+          ) : (
+            <div className="history-compact-list">
+              {props.recentHistory.map((entry) => (
+                <button key={entry.id} className="history-compact-item" onClick={() => void props.onOpenHistory(entry)}>
+                  <strong>{entry.type}</strong>
+                  <span>{entry.date}</span>
+                  <span>{props.copy.common.itemsCount(entry.items)}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="content-panel">
+          <div className="section-heading compact">
+            <h3>{props.copy.workbench.outputs}</h3>
+            <button className="secondary-action" onClick={() => void props.onRefreshHistory()} disabled={props.historyLoading}>
+              {props.historyLoading ? props.copy.library.refreshing : props.copy.workbench.refreshHistory}
+            </button>
+          </div>
+          {props.runFiles.length === 0 ? (
+            <div className="empty-state">{props.copy.workbench.outputEmpty}</div>
+          ) : (
+            <ul className="file-output-list">
+              {props.runFiles.map((file) => <li key={file}>{file}</li>)}
+            </ul>
+          )}
+        </section>
+      </div>
+    </section>
+  );
 }
 
 export function WorkbenchView(props: {
@@ -523,7 +781,7 @@ export function WorkbenchView(props: {
       </details>
     </div>
     <div className="side-stack">
-      <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.logs}</h3><span className={`run-badge ${props.runState}`}>{props.runState}</span></div><div className="terminal-panel">{props.logs.length === 0 ? <div className="empty-terminal">{props.copy.workbench.logEmpty}</div> : props.logs.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}</div></section>
+      <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.logs}</h3><span className={`run-badge ${props.runState}`}>{formatRunState(props.copy, props.runState)}</span></div><div className="terminal-panel">{props.logs.length === 0 ? <div className="empty-terminal">{props.copy.workbench.logEmpty}</div> : props.logs.map((line, index) => <div key={`${index}-${line}`}>{line}</div>)}</div></section>
       <section className="content-panel"><div className="section-heading compact"><h3>{props.copy.workbench.outputs}</h3><button className="secondary-action" onClick={() => void props.onRefreshHistory()} disabled={props.historyLoading}>{props.historyLoading ? props.copy.library.refreshing : props.copy.workbench.refreshHistory}</button></div>{props.runFiles.length === 0 ? <div className="empty-state">{props.copy.workbench.outputEmpty}</div> : <ul className="file-output-list">{props.runFiles.map((file) => <li key={file}>{file}</li>)}</ul>}</section>
     </div>
   </section>;
@@ -531,7 +789,7 @@ export function WorkbenchView(props: {
 
 export function LibraryView(props: { backendHealthy: boolean; history: HistoryEntry[]; selectedResult: ResultSet | null; historyLoading: boolean; onRefresh: () => Promise<void>; onSelect: (entry: HistoryEntry) => Promise<void>; copy: AppCopy }) {
   return <section className="page-grid library-grid">
-    <div className="content-panel"><div className="section-heading"><div><h3>{props.copy.library.title}</h3></div><button className="secondary-action" onClick={() => void props.onRefresh()} disabled={!props.backendHealthy || props.historyLoading}>{props.historyLoading ? props.copy.library.refreshing : props.copy.library.refresh}</button></div>{props.history.length === 0 ? <div className="empty-state">{props.copy.library.empty}</div> : <div className="history-list">{props.history.map((entry) => <button key={entry.id} className="history-card" onClick={() => void props.onSelect(entry)}><div><strong>{entry.type}</strong><p>{entry.path}</p></div><div className="history-meta"><span>{entry.date}</span><span>{entry.items} items</span></div></button>)}</div>}</div>
+    <div className="content-panel"><div className="section-heading"><div><h3>{props.copy.library.title}</h3></div><button className="secondary-action" onClick={() => void props.onRefresh()} disabled={!props.backendHealthy || props.historyLoading}>{props.historyLoading ? props.copy.library.refreshing : props.copy.library.refresh}</button></div>{props.history.length === 0 ? <div className="empty-state">{props.copy.library.empty}</div> : <div className="history-list">{props.history.map((entry) => <button key={entry.id} className="history-card" onClick={() => void props.onSelect(entry)}><div><strong>{entry.type}</strong><p>{entry.path}</p></div><div className="history-meta"><span>{entry.date}</span><span>{props.copy.common.itemsCount(entry.items)}</span></div></button>)}</div>}</div>
     <div className="content-panel"><div className="section-heading compact"><h3>{props.copy.library.details}</h3></div>{!props.selectedResult ? <div className="empty-state">{props.copy.library.emptyDetails}</div> : <div className="result-stack"><div className="result-head"><strong>{props.selectedResult.source}</strong><span>{props.selectedResult.date}</span></div><ResultSection title="Markdown">{props.selectedResult.markdown_files.length === 0 ? <div className="empty-state small">{props.copy.library.noMarkdown}</div> : props.selectedResult.markdown_files.map((file) => <details key={file.name} open><summary>{file.name}</summary><pre>{file.content}</pre></details>)}</ResultSection><ResultSection title="HTML">{props.selectedResult.html_files.length === 0 ? <div className="empty-state small">{props.copy.library.noHtml}</div> : <ul className="file-output-list">{props.selectedResult.html_files.map((file) => <li key={file.name}><a href={file.url} target="_blank" rel="noreferrer">{file.name}</a></li>)}</ul>}</ResultSection><ResultSection title="JSON">{props.selectedResult.json_files.length === 0 ? <div className="empty-state small">{props.copy.library.noJson}</div> : props.selectedResult.json_files.map((file) => <details key={file.name}><summary>{file.name}</summary><pre>{JSON.stringify(file.data, null, 2)}</pre></details>)}</ResultSection></div>}</div>
   </section>;
 }
@@ -580,4 +838,8 @@ function getGitHubAvatarUrl(githubId: string) {
 
 function resolveContributorGithubLink(contributor: MainContributor) {
   return `https://github.com/${contributor.github_id}`;
+}
+
+function formatRunState(copy: AppCopy, runState: RunState) {
+  return copy.workbench.runStates[runState];
 }
