@@ -116,6 +116,13 @@ def main():
     parser.add_argument("--profile_hash", type=str, default="", help="Pre-computed profile hash for cache isolation")
     parser.add_argument("--state_dir", type=str, default="./state", help="State directory for caches")
     parser.add_argument(
+        "--log_level",
+        type=str,
+        choices=["progress", "standard", "verbose"],
+        default=env_str("LOG_LEVEL", "standard"),
+        help="Runtime log verbosity",
+    )
+    parser.add_argument(
         "--skip_source_emails",
         action="store_true",
         help="Generate source outputs without sending per-source emails",
@@ -229,6 +236,7 @@ def main():
         save_dir=args.save_dir,
         profile_hash=profile_hash,
         state_dir=args.state_dir,
+        log_level=args.log_level,
     )
 
     print("Testing LLM availability...")

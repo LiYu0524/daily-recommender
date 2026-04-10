@@ -27,3 +27,4 @@ class CommonConfig:
     save_dir: str = "./history"
     profile_hash: str = ""
     state_dir: str = "./state"
+    log_level: str = "standard"

@@ -7,6 +7,7 @@ import {
   openRunSocket,
   saveConfig,
 } from "./api";
+import { getRunOutputKey, normalizeRunOutputs, renderRunOutputLabel } from "./runOutputs";
 import type {
   ConfigData,
   DeliveryMode,
@@ -15,6 +16,7 @@ import type {
   ResultSet,
   RunCompleteMessage,
   RunMessage,
+  RunOutputFile,
   RunRequest,
   SourceName,
 } from "./types";
@@ -30,6 +32,11 @@ const SOURCE_OPTIONS: Array<{ key: SourceName; label: string; description: strin
 
 const DEFAULT_CONFIG: ConfigData = {
   desktop_python_path: "",
+  profile_name: "",
+  profile_avatar: "1",
+  onboarding_completed: false,
+  model_mode: "custom",
+  smtp_mode: "custom",
   provider: "openai",
   model: "gpt-4o-mini",
   base_url: "",
@@ -48,12 +55,15 @@ const DEFAULT_CONFIG: ConfigData = {
   hf_max_models: 15,
   description: "",
   researcher_profile: "",
+  user_researcher_profile: "",
   x_rapidapi_key: "",
   x_rapidapi_host: "twitter-api45.p.rapidapi.com",
   x_accounts: "",
   arxiv_categories: "cs.AI",
   arxiv_max_entries: 100,
   arxiv_max_papers: 60,
+  log_level: "standard",
+  visible_sources: ["github", "huggingface", "arxiv"],
 };
 
 const DEFAULT_RUN_FORM: RunRequest = {
@@ -77,7 +87,7 @@ function App() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedResult, setSelectedResult] = useState<ResultSet | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const [runFiles, setRunFiles] = useState<string[]>([]);
+  const [runFiles, setRunFiles] = useState<RunOutputFile[]>([]);
   const [runState, setRunState] = useState<"idle" | "running" | "done" | "error">("idle");
   const [statusText, setStatusText] = useState("等待运行");
   const [loading, setLoading] = useState(true);
@@ -181,7 +191,7 @@ function App() {
   function handleRunMessage(message: RunMessage) {
     if (message.type === "complete") {
       const complete = message as RunCompleteMessage;
-      setRunFiles(complete.files);
+      setRunFiles(normalizeRunOutputs(complete.files));
       setRunState(complete.success ? "done" : "error");
       setStatusText(complete.success ? `完成于 ${complete.date}` : "任务退出");
       void refreshHistory();
@@ -297,7 +307,7 @@ function App() {
 function DashboardView(props: {
   runForm: RunRequest;
   logs: string[];
-  runFiles: string[];
+  runFiles: RunOutputFile[];
   runState: "idle" | "running" | "done" | "error";
   historyLoading: boolean;
   onRun: () => void;
@@ -394,7 +404,7 @@ function DashboardView(props: {
             <div className="muted">完成后会在这里列出生成文件。</div>
           ) : (
             <ul className="file-list">
-              {runFiles.map((file) => <li key={file}>{file}</li>)}
+              {runFiles.map((file) => <li key={getRunOutputKey(file)}>{renderRunOutputLabel(file)}</li>)}
             </ul>
           )}
         </div>

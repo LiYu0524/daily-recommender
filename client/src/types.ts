@@ -1,7 +1,11 @@
 export type SourceName = "github" | "huggingface" | "twitter" | "arxiv";
+export type ComingSoonSourceKey = "wos" | "cnki" | "wechat" | "scholar";
+export type VisibleSourceKey = SourceName | ComingSoonSourceKey;
 export type AvatarId = "0" | "1" | "2" | "3";
 
 export type DeliveryMode = "source_emails" | "combined_report" | "both";
+export type LogLevel = "progress" | "standard" | "verbose";
+export type ServiceMode = "custom" | "managed";
 
 export interface PublicMeta {
   github_url: string;
@@ -26,11 +30,17 @@ export interface UserProfile {
   name: string;
   receiver: string;
   focus: string;
+  self_profile: string;
   avatar: AvatarId;
 }
 
 export interface ConfigData {
   desktop_python_path: string;
+  profile_name: string;
+  profile_avatar: AvatarId;
+  onboarding_completed: boolean;
+  model_mode: ServiceMode;
+  smtp_mode: ServiceMode;
   provider: string;
   model: string;
   base_url: string;
@@ -49,12 +59,15 @@ export interface ConfigData {
   hf_max_models: number;
   description: string;
   researcher_profile: string;
+  user_researcher_profile: string;
   x_rapidapi_key: string;
   x_rapidapi_host: string;
   x_accounts: string;
   arxiv_categories: string;
   arxiv_max_entries: number;
   arxiv_max_papers: number;
+  log_level: LogLevel;
+  visible_sources: VisibleSourceKey[];
 }
 
 export interface RunRequest {
@@ -75,11 +88,34 @@ export interface RunLogMessage {
   message: string;
 }
 
+export interface RunOutputMarkdownFile {
+  type: "markdown";
+  name: string;
+  content: string;
+  source: string;
+}
+
+export interface RunOutputHtmlFile {
+  type: "html";
+  name: string;
+  url: string;
+  source: string;
+}
+
+export interface RunOutputJsonListFile {
+  type: "json_list";
+  name: string;
+  items: unknown[];
+  source: string;
+}
+
+export type RunOutputFile = RunOutputMarkdownFile | RunOutputHtmlFile | RunOutputJsonListFile;
+
 export interface RunCompleteMessage {
   type: "complete";
   exit_code: number;
   success: boolean;
-  files: string[];
+  files: RunOutputFile[];
   date: string;
 }
 

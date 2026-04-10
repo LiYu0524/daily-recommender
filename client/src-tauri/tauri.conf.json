@@ -16,8 +16,8 @@
         "title": "iDeer",
         "width": 1480,
         "height": 980,
-        "minWidth": 1180,
-        "minHeight": 760,
+        "minWidth": 820,
+        "minHeight": 620,
         "center": true,
         "resizable": true,
         "decorations": true

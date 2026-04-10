@@ -31,3 +31,4 @@ state/
 .client_config.json
 client/.client_config.json
 .client_logs/
+.local/
