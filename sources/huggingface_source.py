@@ -107,9 +107,10 @@ class HuggingFaceSource(BaseSource):
 
             请按以下 JSON 格式给出你的回答：
             {
-                "summary": <你的中文总结>,
+                "summary": "一段纯文本的中文总结（不要嵌套JSON/dict，直接写一段话）",
                 "relevance": <你的评分>
             }
+            重要：summary 必须是一段纯文本字符串，不要返回嵌套的 JSON 对象或字典。
             使用中文回答。
             直接返回上述 JSON 格式，无需任何额外解释。
         """
@@ -142,9 +143,10 @@ class HuggingFaceSource(BaseSource):
 
             请按以下 JSON 格式给出你的回答：
             {
-                "summary": <你的中文总结>,
+                "summary": "一段纯文本的中文总结（不要嵌套JSON/dict，直接写一段话）",
                 "usefulness": <你的评分>
             }
+            重要：summary 必须是一段纯文本字符串，不要返回嵌套的 JSON 对象或字典。
             使用中文回答。
             直接返回上述 JSON 格式，无需任何额外解释。
         """
@@ -160,7 +162,7 @@ class HuggingFaceSource(BaseSource):
                 "title": item["title"],
                 "id": item.get("id", ""),
                 "abstract": item.get("abstract", ""),
-                "summary": data["summary"],
+                "summary": self._ensure_str(data["summary"]),
                 "score": float(data["relevance"]),
                 "upvotes": item.get("upvotes", 0),
                 "url": item["paper_url"],
@@ -171,7 +173,7 @@ class HuggingFaceSource(BaseSource):
                 "title": item["model_id"],
                 "id": item.get("model_id", ""),
                 "description": item.get("description", ""),
-                "summary": data["summary"],
+                "summary": self._ensure_str(data["summary"]),
                 "score": float(data["usefulness"]),
                 "downloads": item.get("downloads", 0),
                 "likes": item.get("likes", 0),
@@ -217,7 +219,7 @@ class HuggingFaceSource(BaseSource):
         paper_recs = sorted(paper_recs, key=lambda x: x.get("score", 0), reverse=True)[:self.max_papers]
         model_recs = sorted(model_recs, key=lambda x: x.get("score", 0), reverse=True)[:self.max_models]
 
-        combined = paper_recs + model_recs
+        combined = sorted(paper_recs + model_recs, key=lambda x: x.get("score", 0), reverse=True)[:self.MAX_RECOMMEND]
 
         if self.save_dir:
             self._save_markdown(combined)

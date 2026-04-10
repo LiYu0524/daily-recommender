@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ideer"
+version = "0.1.0"
+description = "🦌 iDeer — Turn daily research noise into a clean, personalized briefing"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "LiYu0524", email = "liyu@pjlab.org.cn"},
+]
+keywords = ["arxiv", "paper", "recommender", "daily-digest", "research", "llm"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "tqdm",
+    "loguru",
+    "requests",
+    "beautifulsoup4",
+    "openai",
+    "fastapi>=0.104.0",
+    "uvicorn>=0.24.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "python-multipart>=0.0.6",
+    "websockets>=12.0",
+]
+
+[project.optional-dependencies]
+ollama = ["ollama"]
+
+[project.urls]
+Homepage = "https://github.com/LiYu0524/iDeer"
+Repository = "https://github.com/LiYu0524/iDeer"
+Issues = "https://github.com/LiYu0524/iDeer/issues"
+
+[project.scripts]
+ideer = "cli:main"
+
+[tool.setuptools]
+py-modules = [
+    "cli",
+    "main",
+    "config",
+    "base_source",
+    "cache_utils",
+    "agent_bridge",
+    "idea_generator",
+    "report_generator",
+    "web_server",
+]
+
+[tool.setuptools.packages.find]
+include = ["sources*", "fetchers*", "email_utils*", "llm*"]

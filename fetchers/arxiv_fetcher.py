@@ -7,9 +7,14 @@ import requests
 from bs4 import BeautifulSoup
 
 
+_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+}
+
+
 def get_arxiv_new_papers(category: str = "cs.CV", max_results: int = 100) -> list[dict]:
-    url = f"https://arxiv.org/list/{category}/new?skip=0&show={max_results}"
-    response = requests.get(url, timeout=30)
+    url = f"https://arxiv.org/list/{category}/new"
+    response = requests.get(url, timeout=30, headers=_HEADERS)
     soup = BeautifulSoup(response.text, "html.parser")
 
     try:
@@ -47,6 +52,9 @@ def get_arxiv_new_papers(category: str = "cs.CV", max_results: int = 100) -> lis
             "pdf_url": pdf_url,
             "abstract_url": abs_url,
         })
+
+        if len(papers) >= max_results:
+            break
 
     return papers
 

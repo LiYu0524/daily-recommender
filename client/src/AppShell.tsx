@@ -71,9 +71,10 @@ import iconX from "./assets/icon_x.svg";
 import iconXBlack from "./assets/icon_x.black.svg";
 import "./desktop.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBars, faFolderOpen, faHouse, faStar } from "@fortawesome/free-solid-svg-icons";
+import { faBars, faFire, faFolderOpen, faHouse, faStar } from "@fortawesome/free-solid-svg-icons";
+import { SwipeView } from "./swipeView";
 
-type ViewName = "home" | "library";
+type ViewName = "home" | "library" | "swipe";
 type RunState = "idle" | "running" | "done" | "error";
 type ControlPanel = "none" | "settings";
 type SettingsTab = "profile" | "preferences" | "sources" | "model" | "mail" | "info";
@@ -849,6 +850,7 @@ export default function AppShell() {
           <div className="brand-block text-only"><div><h1>{copy.appTitle}</h1><p className="brand-subtitle">{copy.desktopTitle}</p><p className="brand-meta">{`v${APP_VERSION} · ${RELEASE_DATE}`}</p></div></div>
           <nav className="nav-stack">
             <SidebarButton icon={faHouse} label={copy.sidebar.home} active={activeView === "home"} onClick={() => setActiveView("home")} />
+            <SidebarButton icon={faFire} label={copy.sidebar.swipe} active={activeView === "swipe"} onClick={() => setActiveView("swipe")} />
             <SidebarButton icon={faFolderOpen} label={copy.sidebar.library} active={activeView === "library"} onClick={() => setActiveView("library")} />
           </nav>
           <div className="sidebar-footer">
@@ -895,6 +897,7 @@ export default function AppShell() {
         <main className="workspace">
           {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} comingSoonSources={comingSoonSources} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} runDisabledReason={runDisabledReason} savingInterestDescription={savingInterestDescription} onOpenSettings={() => openControlPanel("preferences")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onSaveInterestDescription={persistInterestDescription} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
           {activeView === "library" && <LibraryView backendHealthy={backendHealthy} history={history} selectedResult={selectedResult} historyLoading={historyLoading} onRefresh={refreshHistoryList} onSelect={openHistory} copy={copy} />}
+          {activeView === "swipe" && <SwipeView backendHealthy={backendHealthy} copy={copy} onOpenUrl={(url) => openExternalUrl(url)} />}
         </main>
 
         <button

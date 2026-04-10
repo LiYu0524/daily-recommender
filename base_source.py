@@ -116,6 +116,10 @@ class BaseSource(ABC):
         """Return a unique cache filename (without extension) for an item."""
         pass
 
+    # Maximum items in the final email/output. Subclass get_max_items() controls
+    # per-source fetch limits; this caps the actual recommendations delivered.
+    MAX_RECOMMEND = 15
+
     def get_max_items(self) -> int:
         """Return the max number of items to recommend. Override in subclass."""
         return 30
@@ -153,6 +157,26 @@ class BaseSource(ABC):
             if value:
                 return self._truncate_for_log(str(value), 260)
         return ""
+
+    @staticmethod
+    def _ensure_str(value) -> str:
+        """Ensure a value is a plain string. LLMs sometimes return dicts/lists
+        for the summary field when the user description is structured."""
+        if isinstance(value, str):
+            return value
+        if isinstance(value, dict):
+            # Flatten nested dict into readable text
+            parts = []
+            for k, v in value.items():
+                if isinstance(v, dict):
+                    sub = "；".join(f"{sk}: {sv}" for sk, sv in v.items())
+                    parts.append(f"【{k}】{sub}")
+                else:
+                    parts.append(f"【{k}】{v}")
+            return " ".join(parts)
+        if isinstance(value, list):
+            return "；".join(str(item) for item in value)
+        return str(value)
 
     def _load_fetch_cache(self, key: str) -> list[dict] | None:
         """Load shared fetch cache (interest-independent)."""
@@ -249,9 +273,10 @@ class BaseSource(ABC):
                 if result:
                     recommendations.append(result)
 
+        limit = min(self.get_max_items(), self.MAX_RECOMMEND)
         recommendations = sorted(
             recommendations, key=lambda x: x.get("score", 0), reverse=True
-        )[:self.get_max_items()]
+        )[:limit]
 
         if self.save_dir:
             self._save_markdown(recommendations)

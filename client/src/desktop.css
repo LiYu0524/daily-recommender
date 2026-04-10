@@ -2948,3 +2948,199 @@ details summary {
     display: none;
   }
 }
+
+/* ============== Swipe (PaperTinder) ============== */
+
+.swipe-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  gap: 20px;
+  user-select: none;
+}
+
+.swipe-card {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  background: var(--panel);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow, 0 8px 32px rgba(0,0,0,0.08));
+  padding: 24px;
+  cursor: grab;
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.swipe-card:active { cursor: grabbing; }
+
+.swipe-card-overlay {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  transition: background 0.1s;
+}
+
+.swipe-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.swipe-source-badge {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+}
+
+.swipe-date {
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+}
+
+.swipe-score {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 700;
+  border: 2px solid;
+  border-radius: 999px;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swipe-card-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary, #111);
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+}
+
+.swipe-card-summary {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--secondary, #374151);
+  max-height: 9.5em;
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, black 70%, transparent 100%);
+  margin-bottom: 12px;
+}
+
+.swipe-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.swipe-chip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--line, #e5e7eb);
+  color: var(--secondary, #4b5563);
+}
+
+.swipe-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--accent, #6366f1);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.swipe-open-link:hover { text-decoration: underline; }
+
+.swipe-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.swipe-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid;
+  background: var(--panel, #fff);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.swipe-btn:hover { transform: scale(1.1); }
+.swipe-btn:active { transform: scale(0.95); }
+
+.swipe-btn.like { border-color: #22c55e; color: #22c55e; }
+.swipe-btn.like:hover { box-shadow: 0 0 20px rgba(34,197,94,0.3); }
+.swipe-btn.dislike { border-color: #ef4444; color: #ef4444; }
+.swipe-btn.dislike:hover { box-shadow: 0 0 20px rgba(239,68,68,0.3); }
+.swipe-btn.undo { width: 40px; height: 40px; font-size: 16px; border-color: var(--muted, #9ca3af); color: var(--muted, #9ca3af); }
+
+.swipe-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--muted, #6b7280);
+}
+
+.swipe-apply-inline {
+  font-size: 12px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line, #e5e7eb);
+  background: transparent;
+  color: var(--accent, #6366f1);
+  cursor: pointer;
+}
+.swipe-apply-inline:hover { background: var(--line, #e5e7eb); }
+
+.swipe-empty-card {
+  text-align: center;
+  max-width: 360px;
+}
+.swipe-empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--primary, #111);
+  margin-bottom: 8px;
+}
+.swipe-empty-sub {
+  font-size: 14px;
+  color: var(--muted, #6b7280);
+  margin-bottom: 20px;
+}
+.swipe-apply-btn {
+  padding: 10px 24px;
+  border-radius: 12px;
+  border: none;
+  background: var(--accent, #6366f1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 4px;
+}
+.swipe-apply-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--line, #e5e7eb);
+  color: var(--secondary, #374151);
+}
+.swipe-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }

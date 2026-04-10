@@ -86,9 +86,10 @@ class ArxivSource(BaseSource):
 
             请按以下 JSON 格式给出你的回答：
             {
-                "summary": <你的总结>,
+                "summary": "一段纯文本的中文总结（不要嵌套JSON/dict，直接写一段话）",
                 "relevance": <你的评分>
             }
+            重要：summary 必须是一段纯文本字符串，不要返回嵌套的 JSON 对象或字典。
             使用中文回答。
             直接返回上述 JSON 格式，无需任何额外解释。
         """
@@ -101,7 +102,7 @@ class ArxivSource(BaseSource):
             "title": item["title"],
             "arxiv_id": item.get("arxiv_id", ""),
             "abstract": item.get("abstract", ""),
-            "summary": data["summary"],
+            "summary": self._ensure_str(data["summary"]),
             "score": float(data["relevance"]),
             "pdf_url": item.get("pdf_url", ""),
             "url": item.get("abstract_url", "") or item.get("pdf_url", ""),

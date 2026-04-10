@@ -26,16 +26,56 @@ impl Default for ManagedBackend {
 }
 
 impl ManagedBackend {
-    fn start(&self) -> Result<String, String> {
-        let mut child_guard = self.child.lock().map_err(|_| "backend lock poisoned".to_string())?;
+    fn start(&self, app_handle: &tauri::AppHandle) -> Result<String, String> {
+        let mut child_guard = self
+            .child
+            .lock()
+            .map_err(|_| "backend lock poisoned".to_string())?;
         if child_guard.is_some() {
             return Ok("backend already running".into());
         }
 
-        let project_root = project_root();
+        let project_root = project_root(app_handle);
         let mut last_error: Option<String> = None;
 
-        let python_candidates = python_candidates();
+        // --- Try bundled sidecar binary first (production build) ---
+        if let Some(sidecar_path) = find_sidecar_binary(app_handle) {
+            match spawn_executable(&sidecar_path, &project_root) {
+                Ok(mut child) => {
+                    thread::sleep(Duration::from_millis(1500));
+                    match child.try_wait() {
+                        Ok(Some(status)) => {
+                            let log_tail = read_backend_log_tail(&project_root, 30);
+                            last_error = Some(format!(
+                                "sidecar exited early (status {}){}",
+                                status,
+                                if log_tail.is_empty() {
+                                    String::new()
+                                } else {
+                                    format!("\n{}", log_tail)
+                                }
+                            ));
+                        }
+                        Ok(None) => {
+                            *child_guard = Some(child);
+                            return Ok(format!(
+                                "started backend via bundled sidecar: {}",
+                                sidecar_path.display()
+                            ));
+                        }
+                        Err(e) => {
+                            last_error = Some(format!("sidecar wait error: {}", e));
+                        }
+                    }
+                }
+                Err(e) => {
+                    last_error = Some(format!("sidecar spawn failed: {}", e));
+                }
+            }
+        }
+
+        // --- Fallback: try system Python ---
+        let python_candidates = python_candidates(&project_root);
 
         for candidate in python_candidates {
             match ensure_python_runtime(&candidate, &project_root) {
@@ -46,21 +86,17 @@ impl ManagedBackend {
                 }
             }
 
-            match spawn_backend(&candidate, &project_root) {
+            match spawn_python_backend(&candidate, &project_root) {
                 Ok(mut child) => {
                     thread::sleep(Duration::from_millis(1200));
                     match child.try_wait() {
                         Ok(Some(status)) => {
-                            let log_tail = read_backend_log_tail(30);
+                            let log_tail = read_backend_log_tail(&project_root, 30);
                             last_error = Some(if log_tail.is_empty() {
-                                format!(
-                                    "{} exited early with status {}",
-                                    candidate.display_name(),
-                                    status
-                                )
+                                format!("{} exited early (status {})", candidate.display_name(), status)
                             } else {
                                 format!(
-                                    "{} exited early with status {}\n{}",
+                                    "{} exited early (status {})\n{}",
                                     candidate.display_name(),
                                     status,
                                     log_tail
@@ -77,8 +113,7 @@ impl ManagedBackend {
 
                     *child_guard = Some(child);
                     return Ok(format!(
-                        "started backend from {} via {}",
-                        project_root.display(),
+                        "started backend via {}",
                         candidate.display_name()
                     ));
                 }
@@ -92,7 +127,10 @@ impl ManagedBackend {
     }
 
     fn stop(&self) -> Result<(), String> {
-        let mut child_guard = self.child.lock().map_err(|_| "backend lock poisoned".to_string())?;
+        let mut child_guard = self
+            .child
+            .lock()
+            .map_err(|_| "backend lock poisoned".to_string())?;
         if let Some(mut child) = child_guard.take() {
             child.kill().map_err(|error| error.to_string())?;
             let _ = child.wait();
@@ -101,7 +139,20 @@ impl ManagedBackend {
     }
 }
 
-fn project_root() -> PathBuf {
+// ---------------------------------------------------------------------------
+// Paths
+// ---------------------------------------------------------------------------
+
+fn project_root(app_handle: &tauri::AppHandle) -> PathBuf {
+    if let Ok(resource_dir) = app_handle.path().resource_dir() {
+        if resource_dir.join("web_server.py").exists() || resource_dir.join("profiles").exists() {
+            return resource_dir;
+        }
+    }
+    project_root_static()
+}
+
+fn project_root_static() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("..")
@@ -110,16 +161,81 @@ fn project_root() -> PathBuf {
 }
 
 fn desktop_config_path() -> PathBuf {
-    project_root().join(".client_config.json")
+    project_root_static().join(".client_config.json")
 }
 
 fn shared_config_path() -> PathBuf {
-    project_root().join(".web_config.json")
+    project_root_static().join(".web_config.json")
 }
 
-fn backend_log_path() -> PathBuf {
-    project_root().join(".client_logs").join("backend.log")
+fn backend_log_path(root: &Path) -> PathBuf {
+    root.join(".client_logs").join("backend.log")
 }
+
+// ---------------------------------------------------------------------------
+// Bundled sidecar binary (PyInstaller-built)
+// ---------------------------------------------------------------------------
+
+fn find_sidecar_binary(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
+    let resource_dir = app_handle.path().resource_dir().ok()?;
+    let triple = current_target_triple();
+
+    let candidates = if cfg!(windows) {
+        vec![
+            resource_dir.join(format!("binaries/ideer-backend-{}.exe", triple)),
+            resource_dir.join("binaries/ideer-backend.exe"),
+        ]
+    } else {
+        vec![
+            resource_dir.join(format!("binaries/ideer-backend-{}", triple)),
+            resource_dir.join("binaries/ideer-backend"),
+        ]
+    };
+
+    candidates.into_iter().find(|p| p.exists())
+}
+
+fn current_target_triple() -> &'static str {
+    if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+        "aarch64-apple-darwin"
+    } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+        "x86_64-apple-darwin"
+    } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+        "x86_64-pc-windows-msvc"
+    } else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+        "x86_64-unknown-linux-gnu"
+    } else {
+        "unknown"
+    }
+}
+
+fn spawn_executable(exe: &Path, cwd: &Path) -> std::io::Result<Child> {
+    let log_path = backend_log_path(cwd);
+    if let Some(parent) = log_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let stdout_log = File::create(&log_path)?;
+    let stderr_log = stdout_log.try_clone()?;
+
+    let mut command = Command::new(exe);
+    command
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout_log))
+        .stderr(Stdio::from(stderr_log));
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    command.spawn()
+}
+
+// ---------------------------------------------------------------------------
+// System Python fallback
+// ---------------------------------------------------------------------------
 
 #[derive(Clone, Debug)]
 struct PythonCandidate {
@@ -153,12 +269,24 @@ fn managed_smtp_config() -> ManagedSmtpConfig {
     }
 }
 
-fn python_candidates() -> Vec<PythonCandidate> {
+fn python_candidates(project_root: &Path) -> Vec<PythonCandidate> {
     let mut candidates = Vec::new();
 
     if let Some(configured_path) = configured_python_path() {
         candidates.push(PythonCandidate {
             program: configured_path,
+            prefix_args: Vec::new(),
+        });
+    }
+
+    let venv_python = if cfg!(windows) {
+        project_root.join(".venv").join("Scripts").join("python.exe")
+    } else {
+        project_root.join(".venv").join("bin").join("python")
+    };
+    if venv_python.exists() {
+        candidates.push(PythonCandidate {
+            program: venv_python.to_string_lossy().into(),
             prefix_args: Vec::new(),
         });
     }
@@ -176,11 +304,12 @@ fn python_candidates() -> Vec<PythonCandidate> {
 }
 
 fn configured_python_path() -> Option<String> {
-    let env_value = std::env::var("IDEER_PYTHON_PATH").ok().map(|value| value.trim().to_string());
-    if let Some(value) = env_value {
-        if !value.is_empty() {
-            return Some(value);
-        }
+    if let Some(value) = std::env::var("IDEER_PYTHON_PATH")
+        .ok()
+        .map(|v| v.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
+        return Some(value);
     }
 
     for path in [desktop_config_path(), shared_config_path()] {
@@ -190,10 +319,9 @@ fn configured_python_path() -> Option<String> {
                     .get("desktop_python_path")
                     .and_then(|item| item.as_str())
                     .map(|item| item.trim().to_string())
+                    .filter(|item| !item.is_empty())
                 {
-                    if !configured.is_empty() {
-                        return Some(configured);
-                    }
+                    return Some(configured);
                 }
             }
         }
@@ -206,10 +334,7 @@ fn ensure_python_runtime(candidate: &PythonCandidate, cwd: &Path) -> Result<(), 
     let mut command = Command::new(&candidate.program);
     command
         .args(&candidate.prefix_args)
-        .args([
-            "-c",
-            "import fastapi, uvicorn, pydantic; print('ideer python ready')",
-        ])
+        .args(["-c", "import fastapi, uvicorn, pydantic; print('ok')"])
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -221,21 +346,21 @@ fn ensure_python_runtime(candidate: &PythonCandidate, cwd: &Path) -> Result<(), 
         command.creation_flags(0x08000000);
     }
 
-    let output = command.output().map_err(|error| error.to_string())?;
+    let output = command.output().map_err(|e| e.to_string())?;
     if output.status.success() {
         return Ok(());
     }
 
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if stderr.is_empty() {
-        Err("python runtime check failed".into())
+    Err(if stderr.is_empty() {
+        "python runtime check failed".into()
     } else {
-        Err(stderr)
-    }
+        stderr
+    })
 }
 
-fn spawn_backend(candidate: &PythonCandidate, cwd: &Path) -> std::io::Result<Child> {
-    let log_path = backend_log_path();
+fn spawn_python_backend(candidate: &PythonCandidate, cwd: &Path) -> std::io::Result<Child> {
+    let log_path = backend_log_path(cwd);
     if let Some(parent) = log_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -260,8 +385,8 @@ fn spawn_backend(candidate: &PythonCandidate, cwd: &Path) -> std::io::Result<Chi
     command.spawn()
 }
 
-fn read_backend_log_tail(limit: usize) -> String {
-    let log_path = backend_log_path();
+fn read_backend_log_tail(root: &Path, limit: usize) -> String {
+    let log_path = backend_log_path(root);
     let content = fs::read_to_string(log_path).unwrap_or_default();
     let lines: Vec<&str> = content.lines().collect();
     let start = lines.len().saturating_sub(limit);
@@ -420,6 +545,10 @@ fn resolve_smtp_test_config(
     Ok((host, port, sender, password))
 }
 
+// ---------------------------------------------------------------------------
+// Utility commands
+// ---------------------------------------------------------------------------
+
 fn open_external_with_system(url: &str) -> Result<(), String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("only http and https urls are supported".into());
@@ -433,7 +562,7 @@ fn open_external_with_system(url: &str) -> Result<(), String> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|error| error.to_string())?;
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
 
@@ -445,7 +574,7 @@ fn open_external_with_system(url: &str) -> Result<(), String> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|error| error.to_string())?;
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
 
@@ -457,14 +586,21 @@ fn open_external_with_system(url: &str) -> Result<(), String> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|error| error.to_string())?;
+            .map_err(|e| e.to_string())?;
         return Ok(());
     }
 }
 
+// ---------------------------------------------------------------------------
+// Tauri commands
+// ---------------------------------------------------------------------------
+
 #[tauri::command]
-fn start_backend(state: tauri::State<ManagedBackend>) -> Result<String, String> {
-    state.start()
+fn start_backend(
+    app_handle: tauri::AppHandle,
+    state: tauri::State<ManagedBackend>,
+) -> Result<String, String> {
+    state.start(&app_handle)
 }
 
 #[tauri::command]
@@ -479,7 +615,7 @@ fn open_external(url: String) -> Result<(), String> {
 
 #[tauri::command]
 fn read_backend_log() -> Result<String, String> {
-    Ok(read_backend_log_tail(60))
+    Ok(read_backend_log_tail(&project_root_static(), 60))
 }
 
 #[tauri::command]
@@ -500,10 +636,10 @@ fn test_smtp_connection(
     let (host, port, sender, password) =
         resolve_smtp_test_config(mode.trim(), &host, port, &sender, &password)?;
 
-    let project_root = project_root();
+    let project_root = project_root_static();
     let mut last_error: Option<String> = None;
 
-    for candidate in python_candidates() {
+    for candidate in python_candidates(&project_root) {
         match run_smtp_test_with_python(
             &candidate,
             &project_root,
@@ -524,32 +660,28 @@ fn test_smtp_connection(
 
 #[tauri::command]
 fn load_desktop_config() -> Result<String, String> {
-    let client_path = desktop_config_path();
-    if client_path.exists() {
-        return fs::read_to_string(&client_path).map_err(|error| error.to_string());
+    for path in [desktop_config_path(), shared_config_path()] {
+        if path.exists() {
+            return fs::read_to_string(&path).map_err(|e| e.to_string());
+        }
     }
-
-    let shared_path = shared_config_path();
-    if shared_path.exists() {
-        return fs::read_to_string(&shared_path).map_err(|error| error.to_string());
-    }
-
     Ok(String::new())
 }
 
 #[tauri::command]
 fn save_desktop_config(content: String) -> Result<(), String> {
-    let client_path = desktop_config_path();
-    let shared_path = shared_config_path();
-
-    fs::write(&client_path, &content).map_err(|error| error.to_string())?;
-    fs::write(&shared_path, &content).map_err(|error| error.to_string())?;
-
+    fs::write(desktop_config_path(), &content).map_err(|e| e.to_string())?;
+    fs::write(shared_config_path(), &content).map_err(|e| e.to_string())?;
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Entry
+// ---------------------------------------------------------------------------
+
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .manage(ManagedBackend::default())
         .invoke_handler(tauri::generate_handler![
             start_backend,

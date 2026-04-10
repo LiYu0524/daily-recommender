@@ -60,7 +60,7 @@ def main():
     parser = argparse.ArgumentParser(description="Unified Daily Recommender")
 
     parser.add_argument(
-        "--sources", nargs="+", required=True,
+        "--sources", nargs="+",
         choices=list(SOURCE_REGISTRY.keys()),
         help=f"Information sources to run: {list(SOURCE_REGISTRY.keys())}",
     )
@@ -74,7 +74,6 @@ def main():
     parser.add_argument(
         "--model", type=str,
         default=model_default,
-        required=model_default is None,
         help="Model name (configured via MODEL_NAME in .env)",
     )
     parser.add_argument(
@@ -126,6 +125,18 @@ def main():
         "--skip_source_emails",
         action="store_true",
         help="Generate source outputs without sending per-source emails",
+    )
+    parser.add_argument(
+        "--cache_clean",
+        nargs="*",
+        default=None,
+        help="Clear caches before running. Targets: all, fetch, eval, history, ideas, reports",
+    )
+    parser.add_argument(
+        "--cache_clean_before",
+        type=str,
+        default=None,
+        help="Only clean cache entries older than this date (YYYY-MM-DD)",
     )
 
     # Idea generation config
@@ -191,6 +202,20 @@ def main():
         source_cls.add_arguments(parser)
 
     args = parser.parse_args()
+
+    # Handle cache clean (can run standalone without --sources)
+    if args.cache_clean is not None:
+        from agent_bridge import cache_clean
+        targets = args.cache_clean if args.cache_clean else ["all"]
+        cache_clean(targets, before=args.cache_clean_before)
+        if not args.sources:
+            print("Cache clean complete.")
+            return
+
+    if not args.sources:
+        parser.error("--sources is required (unless running --cache_clean only)")
+    if not args.model:
+        parser.error("--model is required (set MODEL_NAME in .env or pass --model)")
 
     # Validate LLM config
     if args.generate_ideas and not args.save:

@@ -13,7 +13,7 @@ import os
 import re
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
@@ -42,6 +42,7 @@ RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "researcher_profile.md"
 USER_RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "user_researcher_profile.md"
 LEGACY_USER_RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "reseracher_profile.txt"
 TWITTER_ACCOUNTS_FILE = PROJECT_ROOT / "profiles" / "x_accounts.txt"
+SWIPE_FEEDBACK_FILE = PROJECT_ROOT / "profiles" / "swipe_feedback.json"
 GITHUB_REPO_URL = "https://github.com/LiYu0524/daily-recommender"
 VISIBLE_SOURCE_KEYS = ["github", "huggingface", "twitter", "arxiv", "wos", "cnki", "wechat", "scholar"]
 DEFAULT_VISIBLE_SOURCES = ["github", "huggingface", "arxiv"]
@@ -1168,6 +1169,165 @@ def get_schedule_status():
         "generate_ideas": config.get("schedule_generate_ideas", False),
         "last_run": _last_scheduled_run,
     }
+
+
+# ============== Swipe (PaperTinder) ==============
+
+
+def _load_swipe_feedback() -> dict:
+    if SWIPE_FEEDBACK_FILE.exists():
+        try:
+            return json.loads(SWIPE_FEEDBACK_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"swiped": {}, "stats": {"liked": 0, "disliked": 0, "total": 0}}
+
+
+def _save_swipe_feedback(data: dict) -> None:
+    SWIPE_FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SWIPE_FEEDBACK_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _collect_unseen_items(sources: list[str], days: int, swiped_urls: set[str], limit: int) -> tuple[list[dict], int]:
+    today = datetime.now().strftime("%Y-%m-%d")
+    cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+    items: list[dict] = []
+    total_unseen = 0
+
+    for source in sources:
+        source_dir = HISTORY_DIR / source
+        if not source_dir.is_dir():
+            continue
+        for date_dir in sorted(source_dir.iterdir(), reverse=True):
+            if not date_dir.is_dir():
+                continue
+            date_str = date_dir.name
+            if date_str < cutoff:
+                break
+            json_dir = date_dir / "json"
+            if not json_dir.is_dir():
+                continue
+            for json_file in json_dir.glob("*.json"):
+                try:
+                    data = json.loads(json_file.read_text(encoding="utf-8"))
+                except (json.JSONDecodeError, OSError):
+                    continue
+                url = data.get("url", "")
+                if not url or url in swiped_urls:
+                    continue
+                total_unseen += 1
+                data["_source_type"] = source
+                data["_date"] = date_str
+                data["_is_today"] = date_str == today
+                items.append(data)
+
+    items.sort(key=lambda x: (not x.get("_is_today", False), -x.get("score", 0), x.get("_date", "")))
+    return items[:limit], total_unseen
+
+
+class SwipeFeedbackRequest(BaseModel):
+    url: str
+    action: Literal["like", "dislike", "skip"]
+    source: str = ""
+    title: str = ""
+
+
+@app.get("/api/swipe/queue")
+def get_swipe_queue(sources: str = "", days: int = 7, limit: int = 50):
+    source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else ["arxiv", "huggingface", "github", "semanticscholar"]
+    fb = _load_swipe_feedback()
+    swiped_urls = set(fb.get("swiped", {}).keys())
+    items, total_unseen = _collect_unseen_items(source_list, days, swiped_urls, limit)
+    return {"items": items, "total_unseen": total_unseen, "total_swiped": fb["stats"].get("total", 0)}
+
+
+@app.post("/api/swipe/feedback")
+def record_swipe_feedback(req: SwipeFeedbackRequest):
+    fb = _load_swipe_feedback()
+    swiped = fb.setdefault("swiped", {})
+    stats = fb.setdefault("stats", {"liked": 0, "disliked": 0, "total": 0})
+
+    was_existing = req.url in swiped
+    old_action = swiped.get(req.url, {}).get("action") if was_existing else None
+
+    swiped[req.url] = {
+        "action": req.action,
+        "ts": datetime.now().isoformat(),
+        "source": req.source,
+        "title": req.title,
+    }
+
+    if was_existing and old_action:
+        if old_action == "like":
+            stats["liked"] = max(0, stats["liked"] - 1)
+        elif old_action == "dislike":
+            stats["disliked"] = max(0, stats["disliked"] - 1)
+        stats["total"] = max(0, stats["total"] - 1)
+
+    if req.action == "like":
+        stats["liked"] += 1
+    elif req.action == "dislike":
+        stats["disliked"] += 1
+    stats["total"] += 1
+
+    _save_swipe_feedback(fb)
+    return {"status": "ok", "stats": stats}
+
+
+@app.get("/api/swipe/stats")
+def get_swipe_stats():
+    fb = _load_swipe_feedback()
+    return fb.get("stats", {"liked": 0, "disliked": 0, "total": 0})
+
+
+@app.post("/api/swipe/apply-feedback")
+def apply_swipe_feedback():
+    fb = _load_swipe_feedback()
+    swiped = fb.get("swiped", {})
+    if not swiped:
+        return {"status": "ok", "message": "No swipe data yet."}
+
+    liked_titles = [v["title"] for v in swiped.values() if v.get("action") == "like" and v.get("title")]
+    disliked_titles = [v["title"] for v in swiped.values() if v.get("action") == "dislike" and v.get("title")]
+
+    # Extract simple keyword signals from titles
+    def _extract_keywords(titles: list[str], top_n: int = 10) -> list[str]:
+        from collections import Counter
+        words: Counter[str] = Counter()
+        stop = {"a", "an", "the", "of", "for", "and", "in", "on", "to", "with", "via", "from", "by", "is", "are", "at", "as"}
+        for t in titles:
+            for w in re.split(r"[\s/\-:,.()\[\]]+", t):
+                w = w.strip().lower()
+                if len(w) > 2 and w not in stop and not w.isdigit():
+                    words[w] += 1
+        return [w for w, _ in words.most_common(top_n) if _ >= 2]
+
+    positive = _extract_keywords(liked_titles)
+    negative = _extract_keywords(disliked_titles)
+
+    # Read and update description.txt
+    desc_path = DESCRIPTION_FILE
+    content = desc_path.read_text(encoding="utf-8") if desc_path.exists() else ""
+
+    marker_start = "--- Swipe-derived preferences (auto-updated) ---"
+    marker_end = "---"
+    if marker_start in content:
+        before = content[: content.index(marker_start)].rstrip()
+    else:
+        before = content.rstrip()
+
+    stats = fb.get("stats", {})
+    block = (
+        f"\n\n{marker_start}\n"
+        f"Positive signals: {' | '.join(positive) if positive else '(none yet)'}\n"
+        f"Negative signals: {' | '.join(negative) if negative else '(none yet)'}\n"
+        f"Last updated: {datetime.now().strftime('%Y-%m-%d')}, "
+        f"based on {stats.get('liked', 0)} likes / {stats.get('disliked', 0)} dislikes\n"
+        f"{marker_end}\n"
+    )
+
+    desc_path.write_text(before + block, encoding="utf-8")
+    return {"status": "ok", "positive": positive, "negative": negative}
 
 
 # ============== Main ==============

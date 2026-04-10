@@ -33,6 +33,7 @@ GENERATE_IDEAS=0
 ```
 
 Also requires SMTP settings in `.env`.
+Email delivery should go through the repo's SMTP/code path only.
 
 Recommended run:
 
@@ -59,6 +60,8 @@ Also requires:
 
 - a valid `profiles/researcher_profile.md`
 - SMTP settings in `.env`
+
+Email delivery should go through the repo's SMTP/code path only.
 
 Recommended run:
 
@@ -97,3 +100,6 @@ After a successful run, expect some combination of:
 - `history/reports/<date>/report.md`
 - `history/ideas/<date>/ideas.json`
 
+## Delivery constraint
+
+- Do not use Apple Mail, Outlook, Mail.app, or any other personal mail client as a fallback sender.

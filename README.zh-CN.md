@@ -14,7 +14,7 @@
 
 <img src="./docs/ideer.svg" alt="iDeer Icon" width="360" />
 
-**每天花 30 分钟分别刷 GitHub、arXiv、HuggingFace、Twitter、期刊数据库？**
+**每天花 30 分钟分别刷 GitHub、arXiv、HuggingFace、Twitter？**
 **iDeer 把这件事压缩到打开邮箱的 5 分钟。**
 
 </div>

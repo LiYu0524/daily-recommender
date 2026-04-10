@@ -1704,11 +1704,12 @@ Return JSON:
 
             请按以下 JSON 格式给出你的回答：
             {
-                "summary": <你的中文总结>,
-                "category": <观点/新闻/讨论/分享/公告/日常>,
+                "summary": "一段纯文本的中文总结（不要嵌套JSON/dict，直接写一段话）",
+                "category": "观点/新闻/讨论/分享/公告/日常",
                 "relevance": <你的评分>,
-                "key_points": [<要点1>, <要点2>]
+                "key_points": ["要点1", "要点2"]
             }
+            重要：summary 必须是一段纯文本字符串，不要返回嵌套的 JSON 对象或字典。
             使用中文回答。
             直接返回上述 JSON 格式，无需任何额外解释。
         """
@@ -1731,7 +1732,7 @@ Return JSON:
             "is_quote": item.get("is_quote", False),
             "quoted_text": item.get("quoted_text", ""),
             "quoted_author": item.get("quoted_author", ""),
-            "summary": data["summary"],
+            "summary": self._ensure_str(data["summary"]),
             "category": data.get("category", "日常"),
             "score": float(data["relevance"]),
             "key_points": data.get("key_points", []),

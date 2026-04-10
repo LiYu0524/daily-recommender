@@ -152,3 +152,41 @@ export interface ResultSet {
   html_files: HtmlResultFile[];
   json_files: JsonResultFile[];
 }
+
+// --- Swipe (PaperTinder) ---
+
+export interface SwipeItem {
+  title: string;
+  summary: string;
+  score: number;
+  url: string;
+  _source_type: string;
+  _date: string;
+  _is_today?: boolean;
+  highlights?: string[];
+  category?: string;
+  // Source-specific (all optional)
+  stars?: number;
+  stars_today?: number;
+  forks?: number;
+  language?: string;
+  upvotes?: number;
+  downloads?: number;
+  likes?: number;
+  tags?: string[];
+  authors?: string;
+  venue?: string;
+  citation_count?: number;
+}
+
+export interface SwipeQueueResponse {
+  items: SwipeItem[];
+  total_unseen: number;
+  total_swiped: number;
+}
+
+export interface SwipeStats {
+  liked: number;
+  disliked: number;
+  total: number;
+}

@@ -6,6 +6,8 @@ import type {
   ResultSet,
   RunMessage,
   RunRequest,
+  SwipeQueueResponse,
+  SwipeStats,
 } from "./types";
 
 const apiBase = import.meta.env.VITE_API_BASE?.replace(/\/$/, "") ?? "";
@@ -174,6 +176,36 @@ export function openRunSocket(
   };
 
   return socket;
+}
+
+// --- Swipe (PaperTinder) ---
+
+export async function getSwipeQueue(sources: string[] = [], days: number = 7, limit: number = 50): Promise<SwipeQueueResponse> {
+  const params = new URLSearchParams();
+  if (sources.length) params.set("sources", sources.join(","));
+  params.set("days", String(days));
+  params.set("limit", String(limit));
+  const res = await fetch(buildHttpUrl(`/api/swipe/queue?${params}`));
+  return readJson(res);
+}
+
+export async function sendSwipeFeedback(url: string, action: "like" | "dislike" | "skip", source = "", title = ""): Promise<{ status: string; stats: SwipeStats }> {
+  const res = await fetch(buildHttpUrl("/api/swipe/feedback"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, action, source, title }),
+  });
+  return readJson(res);
+}
+
+export async function getSwipeStats(): Promise<SwipeStats> {
+  const res = await fetch(buildHttpUrl("/api/swipe/stats"));
+  return readJson(res);
+}
+
+export async function applySwipeFeedback(): Promise<{ status: string; positive: string[]; negative: string[] }> {
+  const res = await fetch(buildHttpUrl("/api/swipe/apply-feedback"), { method: "POST" });
+  return readJson(res);
 }
 
 function normalizeProbeError(error: unknown) {
