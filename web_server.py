@@ -39,11 +39,20 @@ CLIENT_DIST_DIR = PROJECT_ROOT / "client" / "dist"
 CLIENT_DIST_INDEX_FILE = CLIENT_DIST_DIR / "index.html"
 DESCRIPTION_FILE = PROJECT_ROOT / "profiles" / "description.txt"
 RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "researcher_profile.md"
+USER_RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "user_researcher_profile.md"
+LEGACY_USER_RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "reseracher_profile.txt"
 TWITTER_ACCOUNTS_FILE = PROJECT_ROOT / "profiles" / "x_accounts.txt"
 GITHUB_REPO_URL = "https://github.com/LiYu0524/daily-recommender"
+VISIBLE_SOURCE_KEYS = ["github", "huggingface", "twitter", "arxiv", "wos", "cnki", "wechat", "scholar"]
+DEFAULT_VISIBLE_SOURCES = ["github", "huggingface", "arxiv"]
 
 DEFAULT_CONFIG = {
     "desktop_python_path": "",
+    "profile_name": "",
+    "profile_avatar": "1",
+    "onboarding_completed": False,
+    "model_mode": "custom",
+    "smtp_mode": "custom",
     "provider": "openai",
     "model": "gpt-4o-mini",
     "base_url": "",
@@ -62,12 +71,15 @@ DEFAULT_CONFIG = {
     "hf_max_models": 15,
     "description": "",
     "researcher_profile": "",
+    "user_researcher_profile": "",
     "x_rapidapi_key": "",
     "x_rapidapi_host": "twitter-api45.p.rapidapi.com",
     "x_accounts": "",
     "arxiv_categories": "cs.AI",
     "arxiv_max_entries": 100,
     "arxiv_max_papers": 60,
+    "log_level": "standard",
+    "visible_sources": list(DEFAULT_VISIBLE_SOURCES),
     "ss_max_results": 60,
     "ss_max_papers": 30,
     "ss_year": "",
@@ -78,6 +90,13 @@ DEFAULT_CONFIG = {
     "schedule_sources": [],
     "schedule_generate_report": False,
     "schedule_generate_ideas": False,
+}
+
+MANAGED_SMTP_CONFIG = {
+    "smtp_server": "smtp.163.com",
+    "smtp_port": 465,
+    "sender": "boming8036881@163.com",
+    "smtp_password": "PSBggDPXAhQVeqx7",
 }
 
 app = FastAPI(title="Daily Recommender API", version="1.0.0")
@@ -143,6 +162,7 @@ def _load_env_fallbacks() -> dict:
         "model": "MODEL_NAME",
         "base_url": "BASE_URL",
         "api_key": "API_KEY",
+        "log_level": "LOG_LEVEL",
         "smtp_server": "SMTP_SERVER",
         "sender": "SMTP_SENDER",
         "receiver": "SMTP_RECEIVER",
@@ -194,6 +214,7 @@ def load_config_data() -> dict:
     file_backed_values = {
         "description": _read_text_if_exists(DESCRIPTION_FILE),
         "researcher_profile": _read_text_if_exists(RESEARCHER_PROFILE_FILE),
+        "user_researcher_profile": _read_text_if_exists(USER_RESEARCHER_PROFILE_FILE) or _read_text_if_exists(LEGACY_USER_RESEARCHER_PROFILE_FILE),
         "x_accounts": _read_text_if_exists(TWITTER_ACCOUNTS_FILE),
     }
     for key, value in file_backed_values.items():
@@ -204,8 +225,22 @@ def load_config_data() -> dict:
         config["hf_content_types"] = ["papers", "models"]
     if not config.get("x_rapidapi_host"):
         config["x_rapidapi_host"] = DEFAULT_CONFIG["x_rapidapi_host"]
+    config["log_level"] = _normalize_log_level(config.get("log_level", "standard"))
+    config["visible_sources"] = _normalize_visible_sources(config.get("visible_sources"))
 
     return config
+
+
+def resolve_smtp_config(config: dict) -> dict[str, object]:
+    mode = str(config.get("smtp_mode", "custom")).strip() or "custom"
+    if mode == "managed":
+        return dict(MANAGED_SMTP_CONFIG)
+    return {
+        "smtp_server": str(config.get("smtp_server", "")).strip(),
+        "smtp_port": int(config.get("smtp_port", 465) or 465),
+        "sender": str(config.get("sender", "")).strip(),
+        "smtp_password": str(config.get("smtp_password", "")).strip(),
+    }
 
 
 def _write_text_file(path: Path, content: str, delete_if_empty: bool = False) -> None:
@@ -221,10 +256,81 @@ def _write_text_file(path: Path, content: str, delete_if_empty: bool = False) ->
     path.write_text("", encoding="utf-8")
 
 
+def _delete_file_if_exists(path: Path) -> None:
+    if path.exists():
+        path.unlink()
+
+
+def _build_effective_researcher_profile(
+    researcher_profile: str | None,
+    user_researcher_profile: str | None,
+    description: str | None,
+) -> str:
+    explicit_profile = _normalize_multiline_text(researcher_profile)
+    if explicit_profile:
+        return explicit_profile
+
+    sections: list[str] = []
+    user_self = _normalize_multiline_text(user_researcher_profile)
+    interests = _normalize_multiline_text(description)
+
+    if user_self:
+        sections.append(f"# Researcher Overview\n{user_self}")
+    if interests:
+        sections.append(f"# Interest Profile\n{interests}")
+
+    return "\n\n".join(section for section in sections if section.strip()).strip()
+
+
 def _append_arg(cmd: list[str], flag: str, value: str | int | float | None) -> None:
     if value in (None, ""):
         return
     cmd.extend([flag, str(value)])
+
+
+def _normalize_log_level(value: str | None) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"progress", "standard", "verbose"}:
+        return normalized
+    return "standard"
+
+
+def _normalize_visible_sources(value: object) -> list[str]:
+    items = value if isinstance(value, list) else []
+    normalized = [key for key in VISIBLE_SOURCE_KEYS if key in items]
+    return normalized or list(DEFAULT_VISIBLE_SOURCES)
+
+
+def _log_level_value(level: str) -> int:
+    return {"progress": 0, "standard": 1, "verbose": 2}.get(_normalize_log_level(level), 1)
+
+
+def _classify_process_log(text: str) -> str:
+    lowered = text.lower()
+    progress_markers = (
+        "starting source",
+        "completed with",
+        "all sources completed",
+        "generating cross-source report",
+        "generating research ideas",
+        "processing ",
+        "no items fetched",
+        "llm is available",
+        "testing llm availability",
+        "source failed",
+    )
+    verbose_markers = (
+        "reading item:",
+        "item text:",
+        "summary input:",
+        "using interest profile:",
+        "researcher self profile:",
+    )
+    if any(marker in lowered for marker in verbose_markers):
+        return "verbose"
+    if any(marker in lowered for marker in progress_markers):
+        return "progress"
+    return "standard"
 
 
 def _resolve_client_dist_path(relative_path: str) -> Path | None:
@@ -367,6 +473,11 @@ def _collect_generated_files(result_dirs: list[Path]) -> list[dict]:
 
 class Config(BaseModel):
     desktop_python_path: str = ""
+    profile_name: str = ""
+    profile_avatar: str = "1"
+    onboarding_completed: bool = False
+    model_mode: Literal["custom", "managed"] = "custom"
+    smtp_mode: Literal["custom", "managed"] = "custom"
     provider: str = "openai"
     model: str = "gpt-4o-mini"
     base_url: str = ""
@@ -385,12 +496,15 @@ class Config(BaseModel):
     hf_max_models: int = 15
     description: str = ""
     researcher_profile: str = ""
+    user_researcher_profile: str = ""
     x_rapidapi_key: str = ""
     x_rapidapi_host: str = "twitter-api45.p.rapidapi.com"
     x_accounts: str = ""
     arxiv_categories: str = "cs.AI"
     arxiv_max_entries: int = 100
     arxiv_max_papers: int = 60
+    log_level: Literal["progress", "standard", "verbose"] = "standard"
+    visible_sources: list[str] = list(DEFAULT_VISIBLE_SOURCES)
     ss_max_results: int = 60
     ss_max_papers: int = 30
     ss_year: str = ""
@@ -427,10 +541,11 @@ def get_config():
 @app.get("/api/public/meta")
 def get_public_meta():
     config = load_config_data()
+    smtp_config = resolve_smtp_config(config)
     return {
         "github_url": GITHUB_REPO_URL,
         "twitter_enabled": bool(config.get("x_rapidapi_key")),
-        "mail_enabled": bool(config.get("smtp_server") and config.get("sender")),
+        "mail_enabled": bool(smtp_config.get("smtp_server") and smtp_config.get("sender")),
         "arxiv_enabled": True,
     }
 
@@ -443,7 +558,14 @@ def save_config(config: Config):
         config_dict = config.model_dump() if hasattr(config, "model_dump") else config.dict()
         config_dict["description"] = _normalize_multiline_text(config_dict.get("description", ""))
         config_dict["researcher_profile"] = _normalize_multiline_text(config_dict.get("researcher_profile", ""))
+        config_dict["user_researcher_profile"] = _normalize_multiline_text(config_dict.get("user_researcher_profile", ""))
         config_dict["x_accounts"] = _normalize_multiline_text(config_dict.get("x_accounts", ""))
+        config_dict["profile_name"] = str(config_dict.get("profile_name", "")).strip()
+        config_dict["profile_avatar"] = str(config_dict.get("profile_avatar", "1")).strip() or "1"
+        config_dict["model_mode"] = str(config_dict.get("model_mode", "custom")).strip() or "custom"
+        config_dict["smtp_mode"] = str(config_dict.get("smtp_mode", "custom")).strip() or "custom"
+        config_dict["log_level"] = _normalize_log_level(config_dict.get("log_level", "standard"))
+        config_dict["visible_sources"] = _normalize_visible_sources(config_dict.get("visible_sources"))
 
         serialized_config = json.dumps(config_dict, indent=2, ensure_ascii=False)
         CONFIG_FILE.write_text(serialized_config, encoding="utf-8")
@@ -456,6 +578,7 @@ MODEL_NAME={config.model}
 BASE_URL={config.base_url}
 API_KEY={config.api_key}
 TEMPERATURE={config.temperature}
+LOG_LEVEL={config.log_level}
 SMTP_SERVER={config.smtp_server}
 SMTP_PORT={config.smtp_port}
 SMTP_SENDER={config.sender}
@@ -468,6 +591,7 @@ HF_CONTENT_TYPES={" ".join(config.hf_content_types)}
 HF_MAX_PAPERS={config.hf_max_papers}
 HF_MAX_MODELS={config.hf_max_models}
 DESCRIPTION_FILE=profiles/description.txt
+USER_RESEARCHER_PROFILE_FILE=profiles/user_researcher_profile.md
 X_RAPIDAPI_KEY={config.x_rapidapi_key}
 X_RAPIDAPI_HOST={config.x_rapidapi_host}
 X_ACCOUNTS_FILE=profiles/x_accounts.txt
@@ -481,8 +605,16 @@ SS_API_KEY={config.ss_api_key}
 """
         (PROJECT_ROOT / ".env").write_text(env_content, encoding="utf-8")
 
+        effective_researcher_profile = _build_effective_researcher_profile(
+            config.researcher_profile,
+            config.user_researcher_profile,
+            config.description,
+        )
+
         _write_text_file(DESCRIPTION_FILE, config.description)
-        _write_text_file(RESEARCHER_PROFILE_FILE, config.researcher_profile, delete_if_empty=True)
+        _write_text_file(RESEARCHER_PROFILE_FILE, effective_researcher_profile, delete_if_empty=True)
+        _write_text_file(USER_RESEARCHER_PROFILE_FILE, config.user_researcher_profile, delete_if_empty=True)
+        _delete_file_if_exists(LEGACY_USER_RESEARCHER_PROFILE_FILE)
         _write_text_file(TWITTER_ACCOUNTS_FILE, config.x_accounts)
 
         return {"status": "ok"}
@@ -511,9 +643,13 @@ async def run_daily_recommender(req: RunRequest):
     try:
         override_description = _normalize_multiline_text(req.description)
         receiver = req.receiver.strip() or str(config.get("receiver", "")).strip()
+        log_level = _normalize_log_level(config.get("log_level", "standard"))
+        smtp_config = resolve_smtp_config(config)
+        user_researcher_profile = _normalize_multiline_text(config.get("user_researcher_profile", ""))
         custom_x_accounts, invalid_x_accounts = _parse_x_accounts_input(req.x_accounts_input)
 
-        effective_description = override_description or _normalize_multiline_text(config.get("description", ""))
+        base_description = override_description or _normalize_multiline_text(config.get("description", ""))
+        effective_description = base_description
         report_profile_path: Path | None = None
         description_path: Path | None = None
         researcher_profile_path: Path | None = None
@@ -529,8 +665,38 @@ async def run_daily_recommender(req: RunRequest):
                 f"以下 X 信息源无法识别：{preview}。仅支持 用户名、@用户名 或 https://x.com/username 链接。"
             )
 
+        # Keep the canonical interest profile file in sync with the latest
+        # run input so downstream code that still reads profiles/description.txt
+        # observes the same Positive/Negative content as the desktop client.
+        _write_text_file(DESCRIPTION_FILE, base_description)
+
+        def should_emit(level: str) -> bool:
+            return _log_level_value(log_level) >= _log_level_value(level)
+
+        def emit_log(level: str, message: str):
+            if should_emit(level):
+                return {"type": "log", "message": message}
+            return None
+
+        startup_logs = [
+            ("progress", f"准备运行 {len(req.sources)} 个信息源: {', '.join(req.sources)}"),
+            ("standard", f"当前日志级别: {log_level}"),
+        ]
+        if base_description:
+            startup_logs.append(("standard", "已同步本次兴趣描述到 profiles/description.txt"))
+        if user_researcher_profile:
+            startup_logs.append(("verbose", f"Researcher self profile: {user_researcher_profile}"))
+        if base_description:
+            startup_logs.append(("verbose", f"Using interest profile: {base_description}"))
+        for level, message in startup_logs:
+            payload = emit_log(level, message)
+            if payload:
+                yield payload
+
         if profile_urls:
-            yield {"type": "log", "message": f"正在读取 {len(profile_urls)} 个 Google Scholar / 主页信息..."}
+            payload = emit_log("progress", f"正在读取 {len(profile_urls)} 个 Google Scholar / 主页信息...")
+            if payload:
+                yield payload
             profile_text, _ = await asyncio.to_thread(build_profile_text_from_urls, profile_urls)
             profile_text = _normalize_multiline_text(profile_text)
             if profile_text:
@@ -542,9 +708,16 @@ async def run_daily_recommender(req: RunRequest):
                     ]
                     if part
                 ).strip()
-                yield {"type": "log", "message": f"已附加 {len(profile_urls)} 个 Scholar 画像信息到本次请求。"}
+                payload = emit_log("standard", f"已附加 {len(profile_urls)} 个 Scholar 画像信息到本次请求。")
+                if payload:
+                    yield payload
+                payload = emit_log("verbose", f"Scholar profile text: {profile_text}")
+                if payload:
+                    yield payload
             else:
-                yield {"type": "log", "message": "Scholar 页面未返回可用文本，将继续使用输入兴趣。"}
+                payload = emit_log("standard", "Scholar 页面未返回可用文本，将继续使用输入兴趣。")
+                if payload:
+                    yield payload
 
         if effective_description:
             description_path = temp_root / "description.txt"
@@ -559,11 +732,18 @@ async def run_daily_recommender(req: RunRequest):
             )
             report_profile_path = researcher_profile_path
         elif req.generate_ideas:
-            base_profile = _normalize_multiline_text(config.get("researcher_profile", "")) or effective_description
+            base_profile = _build_effective_researcher_profile(
+                config.get("researcher_profile", ""),
+                user_researcher_profile,
+                effective_description,
+            )
             if not base_profile:
                 raise ValueError("生成研究想法前，请先配置研究者画像或在本次请求中填写兴趣描述。")
             researcher_profile_path = temp_root / "researcher_profile.md"
             researcher_profile_path.write_text(base_profile + "\n", encoding="utf-8")
+            payload = emit_log("standard", "已根据用户自述与兴趣描述生成本次 researcher profile。")
+            if payload:
+                yield payload
 
         should_generate_report = req.generate_report or req.delivery_mode in ("combined_report", "both")
         should_send_combined_report = req.delivery_mode in ("combined_report", "both")
@@ -572,7 +752,7 @@ async def run_daily_recommender(req: RunRequest):
         if should_send_combined_report and not receiver:
             raise ValueError("请输入接收邮件的邮箱地址。")
 
-        if receiver and (not config.get("smtp_server") or not config.get("sender")):
+        if receiver and (not smtp_config.get("smtp_server") or not smtp_config.get("sender")):
             raise ValueError("服务器还没有配置发件邮箱，请先在 /admin 完成 SMTP 配置。")
 
         cmd = [
@@ -620,11 +800,11 @@ async def run_daily_recommender(req: RunRequest):
             cmd.extend(["--generate_ideas", "--researcher_profile", str(researcher_profile_path)])
             result_dirs.append(HISTORY_DIR / "ideas" / today)
 
-        _append_arg(cmd, "--smtp_server", config.get("smtp_server"))
-        _append_arg(cmd, "--smtp_port", config.get("smtp_port"))
-        _append_arg(cmd, "--sender", config.get("sender"))
+        _append_arg(cmd, "--smtp_server", smtp_config.get("smtp_server"))
+        _append_arg(cmd, "--smtp_port", smtp_config.get("smtp_port"))
+        _append_arg(cmd, "--sender", smtp_config.get("sender"))
         _append_arg(cmd, "--receiver", receiver)
-        _append_arg(cmd, "--sender_password", config.get("smtp_password"))
+        _append_arg(cmd, "--sender_password", smtp_config.get("smtp_password"))
 
         cmd.extend([
             "--gh_languages",
@@ -654,10 +834,9 @@ async def run_daily_recommender(req: RunRequest):
                 merged_x_accounts = _merge_unique_strings(custom_x_accounts, static_x_accounts)
                 accounts_file_path = temp_root / "x_accounts.request.txt"
                 accounts_file_path.write_text("\n".join(merged_x_accounts) + "\n", encoding="utf-8")
-                yield {
-                    "type": "log",
-                    "message": f"已附加 {len(custom_x_accounts)} 个本次请求专用的 X 信息源。",
-                }
+                payload = emit_log("standard", f"已附加 {len(custom_x_accounts)} 个本次请求专用的 X 信息源。")
+                if payload:
+                    yield payload
             _append_arg(cmd, "--x_accounts_file", accounts_file_path)
 
             should_run_oneoff_discovery = bool(override_description or profile_urls)
@@ -698,6 +877,8 @@ async def run_daily_recommender(req: RunRequest):
             if ss_api_key:
                 cmd.extend(["--ss_api_key", ss_api_key])
 
+        _append_arg(cmd, "--log_level", log_level)
+
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -710,7 +891,9 @@ async def run_daily_recommender(req: RunRequest):
             if not line:
                 break
             text = _decode_process_line(line)
-            yield {"type": "log", "message": text}
+            payload = emit_log(_classify_process_log(text), text)
+            if payload:
+                yield payload
 
         await process.wait()
 

@@ -16,9 +16,9 @@ import {
   LibraryView,
   SidebarButton,
   TitleBar,
+  WelcomeView,
 } from "./desktopViews";
 import {
-  closeWindow,
   emitConfigChange,
   emitPreferenceChange,
   emitUserProfileChange,
@@ -28,7 +28,6 @@ import {
   listenUserProfileChange,
   loadDesktopConfig,
   openExternalUrl,
-  openControlPanelWindow,
   readManagedBackendLog,
   saveDesktopConfig,
   startManagedBackend,
@@ -42,15 +41,19 @@ import {
   type LanguagePreference,
   type ThemePreference,
 } from "./copy";
+import { normalizeRunOutputs } from "./runOutputs";
 import type {
   AboutInfo,
   AvatarId,
+  ComingSoonSourceKey,
   ConfigData,
+  DeliveryMode,
   HistoryEntry,
   PublicMeta,
   ResultSet,
   RunCompleteMessage,
   RunMessage,
+  RunOutputFile,
   RunRequest,
   SourceName,
   UserProfile,
@@ -73,8 +76,7 @@ import { faBars, faFolderOpen, faHouse, faStar } from "@fortawesome/free-solid-s
 type ViewName = "home" | "library";
 type RunState = "idle" | "running" | "done" | "error";
 type ControlPanel = "none" | "settings";
-type SettingsTab = "profile" | "preferences" | "subscriptions" | "mail" | "info";
-type ComingSoonSourceKey = "wos" | "cnki" | "wechat" | "scholar";
+type SettingsTab = "profile" | "preferences" | "sources" | "model" | "mail" | "info";
 type StatusState =
   | { kind: "connecting" }
   | { kind: "waitingDesktop" }
@@ -90,13 +92,19 @@ type StatusState =
 
 const DEFAULT_CONFIG: ConfigData = {
   desktop_python_path: "",
+  profile_name: "",
+  profile_avatar: "1",
+  onboarding_completed: false,
+  model_mode: "custom",
+  smtp_mode: "custom",
   provider: "openai", model: "gpt-4o-mini", base_url: "", api_key: "", temperature: 0.5,
   smtp_server: "", smtp_port: 465, sender: "", receiver: "", smtp_password: "",
   gh_languages: "all", gh_since: "daily", gh_max_repos: 30,
   hf_content_types: ["papers", "models"], hf_max_papers: 30, hf_max_models: 15,
-  description: "", researcher_profile: "", x_rapidapi_key: "",
+  description: "", researcher_profile: "", user_researcher_profile: "", x_rapidapi_key: "",
   x_rapidapi_host: "twitter-api45.p.rapidapi.com", x_accounts: "",
-  arxiv_categories: "cs.AI", arxiv_max_entries: 100, arxiv_max_papers: 60,
+  arxiv_categories: "cs.AI", arxiv_max_entries: 100, arxiv_max_papers: 60, log_level: "standard",
+  visible_sources: ["github", "huggingface", "arxiv"],
 };
 
 const DEFAULT_RUN_FORM: RunRequest = {
@@ -109,6 +117,7 @@ const DEFAULT_PROFILE: UserProfile = {
   name: "",
   receiver: "",
   focus: "",
+  self_profile: "",
   avatar: "1",
 };
 
@@ -135,6 +144,31 @@ const SOURCES = [
 ] satisfies Array<{ key: SourceName; label: string; description: string; iconLight: string; iconDark: string; iconActive: string }>;
 
 const COMING_SOON_SOURCE_KEYS = ["wos", "cnki", "wechat", "scholar"] as const satisfies ReadonlyArray<ComingSoonSourceKey>;
+const ALL_VISIBLE_SOURCE_KEYS = [...SOURCES.map((item) => item.key), ...COMING_SOON_SOURCE_KEYS] as const;
+const DEFAULT_ENABLED_SOURCES: SourceName[] = ["github", "huggingface", "arxiv"];
+const APP_VERSION = "0.1.1";
+const RELEASE_DATE = "2026-04-10";
+
+function normalizeVisibleSources(value: ConfigData["visible_sources"] | undefined) {
+  const items = Array.isArray(value) ? value : [];
+  const normalized = ALL_VISIBLE_SOURCE_KEYS.filter((key) => items.includes(key));
+  return normalized.length > 0 ? [...normalized] : [...DEFAULT_ENABLED_SOURCES];
+}
+
+function normalizeProfileAvatar(value: ConfigData["profile_avatar"] | UserProfile["avatar"] | undefined): AvatarId {
+  return value === "0" || value === "1" || value === "2" || value === "3" ? value : "1";
+}
+
+function hasOnboardingBasics(config: ConfigData) {
+  return Boolean(
+    config.onboarding_completed
+    && config.profile_name.trim()
+    && config.receiver.trim()
+    && config.user_researcher_profile.trim()
+    && config.description.trim()
+    && config.visible_sources.some((key) => SOURCES.some((source) => source.key === key)),
+  );
+}
 
 function parseInterestSummary(value: string) {
   const raw = value.trim();
@@ -171,12 +205,11 @@ function parseInterestSummary(value: string) {
 
 export default function AppShell() {
   const desktopWindow = isTauriDesktop();
-  const forcedTab = readTabFromLocation();
-  const panelWindowMode = desktopWindow && forcedTab !== null;
   const showCustomTitleBar = !desktopWindow;
   const socketRef = useRef<WebSocket | null>(null);
   const [languagePreference, setLanguagePreference] = useState<LanguagePreference>(() => readPreference("ideer.language", "system"));
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readPreference("ideer.theme", "system"));
+  const [deliveryModePreference, setDeliveryModePreference] = useState<DeliveryMode>(() => readPreference("ideer.deliveryMode", "combined_report"));
   const language = resolveLanguage(languagePreference);
   const theme = resolveTheme(themePreference);
   const copy = COPY[language];
@@ -194,7 +227,7 @@ export default function AppShell() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [selectedResult, setSelectedResult] = useState<ResultSet | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
-  const [runFiles, setRunFiles] = useState<string[]>([]);
+  const [runFiles, setRunFiles] = useState<RunOutputFile[]>([]);
   const [runState, setRunState] = useState<RunState>("idle");
   const [status, setStatus] = useState<StatusState>({ kind: "connecting" });
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -206,6 +239,7 @@ export default function AppShell() {
   const [testingSmtpConnection, setTestingSmtpConnection] = useState(false);
   const [smtpTestResult, setSmtpTestResult] = useState<{ kind: "idle" | "success" | "error"; message: string }>({ kind: "idle", message: "" });
   const [errorText, setErrorText] = useState("");
+  const [welcomeReady, setWelcomeReady] = useState(false);
   const statusText = resolveStatusText(copy, status);
 
   useEffect(() => {
@@ -219,13 +253,19 @@ export default function AppShell() {
 
   useEffect(() => {
     window.localStorage.setItem("ideer.language", languagePreference);
-    void emitPreferenceChange({ languagePreference, themePreference });
+    void emitPreferenceChange({ languagePreference, themePreference, deliveryModePreference });
   }, [languagePreference]);
 
   useEffect(() => {
     window.localStorage.setItem("ideer.theme", themePreference);
-    void emitPreferenceChange({ languagePreference, themePreference });
+    void emitPreferenceChange({ languagePreference, themePreference, deliveryModePreference });
   }, [themePreference]);
+
+  useEffect(() => {
+    window.localStorage.setItem("ideer.deliveryMode", deliveryModePreference);
+    setRunForm((prev) => prev.delivery_mode === deliveryModePreference ? prev : { ...prev, delivery_mode: deliveryModePreference });
+    void emitPreferenceChange({ languagePreference, themePreference, deliveryModePreference });
+  }, [deliveryModePreference]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -235,8 +275,10 @@ export default function AppShell() {
     const handleStorage = () => {
       const nextLanguage = readPreference<LanguagePreference>("ideer.language", "system");
       const nextTheme = readPreference<ThemePreference>("ideer.theme", "system");
+      const nextDeliveryMode = readPreference<DeliveryMode>("ideer.deliveryMode", "combined_report");
       setLanguagePreference((prev) => prev === nextLanguage ? prev : nextLanguage);
       setThemePreference((prev) => prev === nextTheme ? prev : nextTheme);
+      setDeliveryModePreference((prev) => prev === nextDeliveryMode ? prev : nextDeliveryMode);
     };
 
     window.addEventListener("storage", handleStorage);
@@ -247,22 +289,32 @@ export default function AppShell() {
     void listenPreferenceChange((payload) => {
       setLanguagePreference((prev) => prev === payload.languagePreference ? prev : payload.languagePreference);
       setThemePreference((prev) => prev === payload.themePreference ? prev : payload.themePreference);
+      setDeliveryModePreference((prev) => prev === payload.deliveryModePreference ? prev : payload.deliveryModePreference);
     }).then((dispose) => {
       unlisten = dispose;
     });
 
     void listenConfigChange((nextConfig) => {
-      setConfig(nextConfig);
+      const normalizedConfig = {
+        ...DEFAULT_CONFIG,
+        ...nextConfig,
+        visible_sources: normalizeVisibleSources(nextConfig.visible_sources),
+        profile_avatar: normalizeProfileAvatar(nextConfig.profile_avatar),
+      };
+      setConfig(normalizedConfig);
       setRunForm((prev) => ({
         ...prev,
-        receiver: nextConfig.receiver,
-        description: nextConfig.description,
-        researcher_profile: nextConfig.researcher_profile,
+        receiver: normalizedConfig.receiver,
+        description: normalizedConfig.description,
+        researcher_profile: normalizedConfig.researcher_profile,
       }));
       setUserProfile((prev) => normalizeUserProfile({
         ...prev,
-        receiver: nextConfig.receiver,
-        focus: nextConfig.description,
+        name: normalizedConfig.profile_name || prev.name,
+        avatar: normalizeProfileAvatar(normalizedConfig.profile_avatar),
+        receiver: normalizedConfig.receiver,
+        focus: normalizedConfig.description,
+        self_profile: normalizedConfig.user_researcher_profile || prev.self_profile,
       }));
     }).then((dispose) => {
       unlistenConfig = dispose;
@@ -282,6 +334,19 @@ export default function AppShell() {
       unlistenUserProfile?.();
     };
   }, []);
+
+  useEffect(() => {
+    const enabledRunSources = SOURCES
+      .map((item) => item.key)
+      .filter((key) => config.visible_sources.includes(key));
+    setRunForm((prev) => {
+      const nextSources = prev.sources.filter((key) => enabledRunSources.includes(key));
+      if (nextSources.length === prev.sources.length) {
+        return prev;
+      }
+      return { ...prev, sources: nextSources };
+    });
+  }, [config.visible_sources]);
 
   useEffect(() => {
     setConnectionTestResult({ kind: "idle", message: "" });
@@ -312,6 +377,7 @@ export default function AppShell() {
       setLoadingData(false);
       setStatus({ kind: isTauriDesktop() ? "waitingDesktop" : "waitingWeb" });
     }
+    setWelcomeReady(true);
   }
 
   async function refreshHealth() {
@@ -343,7 +409,12 @@ export default function AppShell() {
       if (!localConfig) {
         return;
       }
-      setConfig(localConfig);
+      setConfig({
+        ...DEFAULT_CONFIG,
+        ...localConfig,
+        visible_sources: normalizeVisibleSources(localConfig.visible_sources),
+        profile_avatar: normalizeProfileAvatar(localConfig.profile_avatar),
+      });
       setRunForm((prev) => ({
         ...prev,
         receiver: localConfig.receiver,
@@ -352,8 +423,11 @@ export default function AppShell() {
       }));
       setUserProfile((prev) => normalizeUserProfile({
         ...prev,
+        name: localConfig.profile_name || prev.name,
+        avatar: normalizeProfileAvatar(localConfig.profile_avatar),
         receiver: localConfig.receiver || prev.receiver,
         focus: localConfig.description,
+        self_profile: localConfig.user_researcher_profile || prev.self_profile,
       }));
     } catch {
       // ignore local config parse failures and keep defaults
@@ -365,12 +439,20 @@ export default function AppShell() {
       setLoadingData(true);
       const [metaData, configData, historyData] = await Promise.all([getPublicMeta(), getConfig(), getHistory()]);
       setMeta(metaData);
-      setConfig(configData);
+      setConfig({
+        ...DEFAULT_CONFIG,
+        ...configData,
+        visible_sources: normalizeVisibleSources(configData.visible_sources),
+        profile_avatar: normalizeProfileAvatar(configData.profile_avatar),
+      });
       setRunForm((prev) => ({ ...prev, receiver: configData.receiver, description: configData.description, researcher_profile: configData.researcher_profile }));
       setUserProfile((prev) => normalizeUserProfile({
         ...prev,
+        name: configData.profile_name || prev.name,
+        avatar: normalizeProfileAvatar(configData.profile_avatar),
         receiver: configData.receiver || prev.receiver,
         focus: configData.description,
+        self_profile: configData.user_researcher_profile || prev.self_profile,
       }));
       setHistory(historyData);
       setStatus({ kind: "connected" });
@@ -453,13 +535,21 @@ export default function AppShell() {
         ...prev,
         receiver: config.receiver || prev.receiver,
         focus: config.description,
+        self_profile: config.user_researcher_profile || prev.self_profile,
       }));
+      const nextConfig = {
+        ...config,
+        visible_sources: normalizeVisibleSources(config.visible_sources),
+        profile_name: userProfile.name.trim(),
+        profile_avatar: normalizeProfileAvatar(userProfile.avatar),
+      };
+      setConfig(nextConfig);
       if (desktopWindow) {
-        await saveDesktopConfig(config);
-        await emitConfigChange(config);
+        await saveDesktopConfig(nextConfig);
+        await emitConfigChange(nextConfig);
       }
       if (backendHealthy) {
-        await saveConfig(config);
+        await saveConfig(nextConfig);
       }
       setStatus({ kind: "configSaved", localOnly: !backendHealthy });
     } catch (error) {
@@ -485,6 +575,7 @@ export default function AppShell() {
       setUserProfile((prev) => normalizeUserProfile({
         ...prev,
         focus: nextDescription,
+        self_profile: config.user_researcher_profile || prev.self_profile,
       }));
       if (desktopWindow) {
         await saveDesktopConfig(nextConfig);
@@ -506,12 +597,16 @@ export default function AppShell() {
       ...normalizeUserProfile(userProfile),
       receiver: userProfile.receiver.trim(),
       focus: userProfile.focus.trim(),
+      self_profile: config.user_researcher_profile.trim(),
       name: userProfile.name.trim(),
     };
     const nextConfig = {
       ...config,
       receiver: nextProfile.receiver,
       description: nextProfile.focus,
+      user_researcher_profile: nextProfile.self_profile,
+      profile_name: nextProfile.name,
+      profile_avatar: normalizeProfileAvatar(nextProfile.avatar),
     };
     try {
       setSavingProfile(true);
@@ -557,11 +652,28 @@ export default function AppShell() {
 
   async function handleTestSmtpConnection() {
     try {
-      if (!config.smtp_server.trim()) {
+      const smtpReceiver = (config.receiver || userProfile.receiver).trim();
+      if (!smtpReceiver) {
+        throw new Error(copy.runtime.smtpReceiverRequired);
+      }
+      if (config.smtp_mode === "custom" && !config.smtp_server.trim()) {
         throw new Error(copy.runtime.smtpServerRequired);
       }
+      if (config.smtp_mode === "custom" && !config.sender.trim()) {
+        throw new Error(copy.runtime.smtpSenderRequired);
+      }
+      if (config.smtp_mode === "custom" && !config.smtp_password.trim()) {
+        throw new Error(copy.runtime.smtpPasswordRequired);
+      }
       setTestingSmtpConnection(true);
-      const result = await testSmtpConnection(config.smtp_server, config.smtp_port);
+      const result = await testSmtpConnection(
+        config.smtp_mode,
+        config.smtp_server,
+        config.smtp_port,
+        config.sender,
+        config.smtp_password,
+        smtpReceiver,
+      );
       setSmtpTestResult({ kind: "success", message: result });
     } catch (error) {
       setSmtpTestResult({ kind: "error", message: getErrorMessage(error, copy) });
@@ -570,18 +682,64 @@ export default function AppShell() {
     }
   }
 
-  async function openControlPanel(tab: SettingsTab = "profile") {
-    if (panelWindowMode) {
+  async function completeOnboarding() {
+    const nextProfile = normalizeUserProfile({
+      ...userProfile,
+      name: userProfile.name.trim(),
+      receiver: config.receiver.trim(),
+      focus: config.description.trim(),
+      self_profile: config.user_researcher_profile.trim(),
+      avatar: normalizeProfileAvatar(userProfile.avatar),
+    });
+    const visibleSources = normalizeVisibleSources(config.visible_sources);
+    const enabledRunSources = SOURCES.map((source) => source.key).filter((source) => visibleSources.includes(source));
+    const nextConfig = {
+      ...config,
+      profile_name: nextProfile.name,
+      profile_avatar: normalizeProfileAvatar(nextProfile.avatar),
+      onboarding_completed: true,
+      receiver: nextProfile.receiver,
+      description: nextProfile.focus,
+      user_researcher_profile: nextProfile.self_profile,
+      visible_sources: visibleSources,
+    };
+
+    if (!hasOnboardingBasics(nextConfig)) {
+      setErrorText(copy.welcome.requiredHint);
       return;
     }
-    if (isTauriDesktop()) {
-      try {
-        await openControlPanelWindow(tab);
-      } catch (error) {
-        setErrorText(getErrorMessage(error, copy));
+
+    try {
+      setSavingConfig(true);
+      setSavingProfile(true);
+      setConfig(nextConfig);
+      setUserProfile(nextProfile);
+      setRunForm((prev) => ({
+        ...prev,
+        receiver: nextConfig.receiver,
+        description: nextConfig.description,
+        sources: enabledRunSources.length > 0 ? enabledRunSources : prev.sources,
+      }));
+      window.localStorage.setItem("ideer.user", JSON.stringify(nextProfile));
+      await emitUserProfileChange(nextProfile);
+      if (desktopWindow) {
+        await saveDesktopConfig(nextConfig);
+        await emitConfigChange(nextConfig);
       }
-      return;
+      if (backendHealthy) {
+        await saveConfig(nextConfig);
+      }
+      setStatus({ kind: "profileSaved" });
+      setErrorText("");
+    } catch (error) {
+      setErrorText(getErrorMessage(error, copy));
+    } finally {
+      setSavingConfig(false);
+      setSavingProfile(false);
     }
+  }
+
+  async function openControlPanel(tab: SettingsTab = "profile") {
     setSettingsTab(tab);
     setControlPanel("settings");
   }
@@ -596,7 +754,7 @@ export default function AppShell() {
       onMessage(message) {
         if (message.type === "complete") {
           const done = message as RunCompleteMessage;
-          setRunFiles(done.files);
+          setRunFiles(normalizeRunOutputs(done.files));
           setRunState(done.success ? "done" : "error");
           setStatus(done.success ? { kind: "runDone", date: done.date } : { kind: "runExited" });
           void refreshHistoryList();
@@ -615,21 +773,32 @@ export default function AppShell() {
     });
   }
 
-  const sources = useMemo(() => SOURCES.map((item) => {
+  const sources = useMemo(() => SOURCES.flatMap((item) => {
+    if (!config.visible_sources.includes(item.key)) {
+      return [];
+    }
     const selected = runForm.sources.includes(item.key);
-    return {
+    return [{
       ...item,
       description: copy.sourceDescriptions[item.key],
       selected,
       icon: selected ? item.iconActive : theme === "dark" ? item.iconDark : item.iconLight,
-    };
-  }), [copy, runForm.sources, theme]);
+    }];
+  }), [config.visible_sources, copy, runForm.sources, theme]);
   const comingSoonSources = useMemo(
-    () => COMING_SOON_SOURCE_KEYS.map((key) => ({ key, label: copy.comingSoonSources[key] })),
-    [copy],
+    () => COMING_SOON_SOURCE_KEYS
+      .filter((key) => config.visible_sources.includes(key))
+      .map((key) => ({ key, label: copy.comingSoonSources[key] })),
+    [config.visible_sources, copy],
   );
   const avatarMap = useMemo(() => Object.fromEntries(AVATARS.map((item) => [item.key, item.src])) as Record<AvatarId, string>, []);
   const sidebarName = userProfile.name || copy.user.fallbackName;
+  const sidebarReceiver = runForm.receiver || config.receiver || userProfile.receiver || copy.home.noReceiver;
+  const sidebarDeliveryMode = deliveryModePreference === "source_emails"
+    ? copy.workbench.sourceEmails
+    : deliveryModePreference === "both"
+      ? copy.workbench.both
+      : copy.workbench.combinedReport;
   const interestSummary = useMemo(() => {
     const tags = parseInterestSummary(config.description || userProfile.focus);
     const preview = tags.positive.slice(0, 2).join(" · ") || userProfile.focus || copy.user.fallbackFocus;
@@ -638,68 +807,79 @@ export default function AppShell() {
     return `${preview}${extra}${negative}`;
   }, [config.description, copy.user.fallbackFocus, userProfile.focus]);
   const commonProps = { backendHealthy, loadingData, errorText, statusText, copy };
+  const welcomeVisible = welcomeReady && !hasOnboardingBasics(config);
   const runDisabledReason = !backendHealthy
     ? copy.home.runBlockedBackend
-    : runState === "running"
-      ? copy.home.runBlockedRunning
-      : runForm.sources.length === 0
+    : runForm.sources.length === 0
         ? copy.home.runBlockedSources
         : "";
 
-  if (panelWindowMode && forcedTab) {
-    return (
-      <div className="desktop-root panel-window-mode native-frame">
-        <ControlCenter
-          detached
-          panel="settings"
-          initialTab={forcedTab}
-          onClose={() => void closeWindow()}
-          userProfile={userProfile}
-          avatars={AVATARS}
-          backendHealthy={backendHealthy}
-          startingBackend={startingBackend}
-          statusText={statusText}
-          config={config}
-          savingConfig={savingConfig}
-          savingProfile={savingProfile}
-          onChangeConfig={setConfig}
-          onChangeUserProfile={setUserProfile}
-          onSave={persistConfig}
-          onTestConnection={handleTestConnection}
-          onSaveProfile={persistUserProfile}
-          onStartBackend={handleStartBackend}
-          onStopBackend={handleStopBackend}
-          onRefresh={hydrate}
+  return (
+    <div className={showCustomTitleBar ? "desktop-root" : "desktop-root native-frame"}>
+      {showCustomTitleBar ? <TitleBar backendHealthy={backendHealthy} statusText={statusText} previewBadge={copy.previewBadge} title={copy.desktopTitle} copy={copy} /> : null}
+      {welcomeVisible ? (
+        <WelcomeView
           copy={copy}
           appIcon={iconIDeer}
-          githubUrl={aboutInfo.github_url || meta?.github_url || DEFAULT_ABOUT_INFO.github_url}
-          contributors={aboutInfo.contributors}
+          version={APP_VERSION}
+          releaseDate={RELEASE_DATE}
+          config={config}
+          userProfile={userProfile}
+          avatars={AVATARS}
+          saving={savingConfig || savingProfile}
           testingConnection={testingConnection}
           connectionTestResult={connectionTestResult}
           testingSmtpConnection={testingSmtpConnection}
           smtpTestResult={smtpTestResult}
           languagePreference={languagePreference}
           themePreference={themePreference}
+          deliveryModePreference={deliveryModePreference}
+          onChangeConfig={setConfig}
+          onChangeUserProfile={setUserProfile}
           onChangeLanguage={setLanguagePreference}
           onChangeTheme={setThemePreference}
+          onChangeDeliveryMode={setDeliveryModePreference}
+          onTestConnection={handleTestConnection}
           onTestSmtpConnection={handleTestSmtpConnection}
+          onComplete={completeOnboarding}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className={showCustomTitleBar ? "desktop-root" : "desktop-root native-frame"}>
-      {showCustomTitleBar ? <TitleBar backendHealthy={backendHealthy} statusText={statusText} previewBadge={copy.previewBadge} title={copy.desktopTitle} copy={copy} /> : null}
+      ) : null}
       <div className="desktop-shell">
         <aside className="app-sidebar">
-          <div className="brand-block text-only"><div><h1>{copy.appTitle}</h1><p className="brand-subtitle">{copy.desktopTitle}</p></div></div>
+          <div className="brand-block text-only"><div><h1>{copy.appTitle}</h1><p className="brand-subtitle">{copy.desktopTitle}</p><p className="brand-meta">{`v${APP_VERSION} · ${RELEASE_DATE}`}</p></div></div>
           <nav className="nav-stack">
             <SidebarButton icon={faHouse} label={copy.sidebar.home} active={activeView === "home"} onClick={() => setActiveView("home")} />
             <SidebarButton icon={faFolderOpen} label={copy.sidebar.library} active={activeView === "library"} onClick={() => setActiveView("library")} />
           </nav>
           <div className="sidebar-footer">
             <div className="user-dock">
+              <section className="sidebar-panel sidebar-status-panel">
+                <div className="sidebar-status-header">
+                  <strong>{copy.sidebar.status}</strong>
+                  <button type="button" className="sidebar-status-link" onClick={() => void hydrate()}>
+                    {copy.home.refresh}
+                  </button>
+                </div>
+                <div className="sidebar-status-list">
+                  <div className="sidebar-status-item">
+                    <span>{copy.home.backend}</span>
+                    <strong>{backendHealthy ? copy.home.online : copy.home.offline}</strong>
+                  </div>
+                  <div className="sidebar-status-item">
+                    <span>{copy.workbench.receiver}</span>
+                    <strong>{sidebarReceiver}</strong>
+                  </div>
+                  <div className="sidebar-status-item">
+                    <span>{copy.workbench.deliveryMode}</span>
+                    <strong>{sidebarDeliveryMode}</strong>
+                  </div>
+                </div>
+                {!backendHealthy && isTauriDesktop() ? (
+                  <button type="button" className="secondary-action sidebar-status-action" onClick={() => void handleStartBackend()} disabled={startingBackend}>
+                    {startingBackend ? copy.home.startingBackend : copy.home.startBackend}
+                  </button>
+                ) : null}
+              </section>
               <button type="button" className="user-card" onClick={() => openControlPanel("profile")}>
                 <img src={avatarMap[userProfile.avatar]} alt={sidebarName} className="user-avatar" />
                 <span className="user-meta">
@@ -713,7 +893,7 @@ export default function AppShell() {
         </aside>
 
         <main className="workspace">
-          {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} comingSoonSources={comingSoonSources} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} runDisabledReason={runDisabledReason} savingInterestDescription={savingInterestDescription} onOpenSettings={() => openControlPanel("profile")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onSaveInterestDescription={persistInterestDescription} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
+          {activeView === "home" && <HomeView {...commonProps} config={config} recentHistory={history.slice(0, 5)} sources={sources} comingSoonSources={comingSoonSources} startingBackend={startingBackend} runForm={runForm} runState={runState} logs={logs} runFiles={runFiles} historyLoading={historyLoading} runDisabledReason={runDisabledReason} savingInterestDescription={savingInterestDescription} onOpenSettings={() => openControlPanel("preferences")} onRefresh={hydrate} onRun={runWorkflow} onRefreshHistory={refreshHistoryList} onStartBackend={handleStartBackend} onStopBackend={handleStopBackend} onOpenHistory={openHistory} onSaveInterestDescription={persistInterestDescription} onToggleSource={(source) => setRunForm((prev) => ({ ...prev, sources: prev.sources.includes(source) ? prev.sources.filter((item) => item !== source) : [...prev.sources, source] }))} onChangeRunForm={(key, value) => setRunForm((prev) => ({ ...prev, [key]: value }))} />}
           {activeView === "library" && <LibraryView backendHealthy={backendHealthy} history={history} selectedResult={selectedResult} historyLoading={historyLoading} onRefresh={refreshHistoryList} onSelect={openHistory} copy={copy} />}
         </main>
 
@@ -726,7 +906,7 @@ export default function AppShell() {
           <FontAwesomeIcon icon={faStar} />
         </button>
 
-        {controlPanel === "settings" ? <ControlCenter
+        {!welcomeVisible && controlPanel === "settings" ? <ControlCenter
           panel="settings"
           initialTab={settingsTab}
           onClose={() => setControlPanel("none")}
@@ -748,16 +928,21 @@ export default function AppShell() {
           onRefresh={hydrate}
           copy={copy}
           appIcon={iconIDeer}
+          version={APP_VERSION}
+          releaseDate={RELEASE_DATE}
           githubUrl={aboutInfo.github_url || meta?.github_url || DEFAULT_ABOUT_INFO.github_url}
           contributors={aboutInfo.contributors}
+          fallbackContributorAvatar={avatar3}
           testingConnection={testingConnection}
           connectionTestResult={connectionTestResult}
           testingSmtpConnection={testingSmtpConnection}
           smtpTestResult={smtpTestResult}
           languagePreference={languagePreference}
           themePreference={themePreference}
+          deliveryModePreference={deliveryModePreference}
           onChangeLanguage={setLanguagePreference}
           onChangeTheme={setThemePreference}
+          onChangeDeliveryMode={setDeliveryModePreference}
           onTestSmtpConnection={handleTestSmtpConnection}
         /> : null}
       </div>
@@ -860,21 +1045,7 @@ function normalizeUserProfile(profile: UserProfile): UserProfile {
   const validAvatars = new Set<AvatarId>(["0", "1", "2", "3"]);
   return {
     ...profile,
+    self_profile: profile.self_profile ?? "",
     avatar: validAvatars.has(profile.avatar) ? profile.avatar : "1",
   };
-}
-
-function readTabFromLocation(): SettingsTab | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-  const params = new URLSearchParams(window.location.search);
-  if (params.get("window") !== "panel") {
-    return null;
-  }
-  const tab = params.get("tab");
-  if (tab === "profile" || tab === "preferences" || tab === "subscriptions" || tab === "mail" || tab === "info") {
-    return tab;
-  }
-  return "profile";
 }

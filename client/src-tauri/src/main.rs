@@ -3,7 +3,6 @@
 use std::{
     fs,
     fs::File,
-    net::{TcpStream, ToSocketAddrs},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::Mutex,
@@ -138,6 +137,22 @@ impl PythonCandidate {
     }
 }
 
+struct ManagedSmtpConfig {
+    host: &'static str,
+    port: u16,
+    sender: &'static str,
+    password: &'static str,
+}
+
+fn managed_smtp_config() -> ManagedSmtpConfig {
+    ManagedSmtpConfig {
+        host: "smtp.163.com",
+        port: 465,
+        sender: "boming8036881@163.com",
+        password: "PSBggDPXAhQVeqx7",
+    }
+}
+
 fn python_candidates() -> Vec<PythonCandidate> {
     let mut candidates = Vec::new();
 
@@ -253,6 +268,158 @@ fn read_backend_log_tail(limit: usize) -> String {
     lines[start..].join("\n")
 }
 
+fn run_smtp_test_with_python(
+    candidate: &PythonCandidate,
+    cwd: &Path,
+    mode: &str,
+    host: &str,
+    port: u16,
+    sender: &str,
+    password: &str,
+    receiver: &str,
+) -> Result<String, String> {
+    const SMTP_TEST_SCRIPT: &str = r#"import smtplib
+import ssl
+import sys
+from datetime import datetime, timezone
+from email.message import EmailMessage
+from email.utils import formataddr
+
+mode, host, port_text, sender, password, receiver_text = sys.argv[1:7]
+port = int(port_text)
+receivers = [item.strip() for item in receiver_text.replace(';', ',').split(',') if item.strip()]
+
+if not receivers:
+    raise SystemExit('receiver is required')
+
+now_local = datetime.now().astimezone()
+now_utc = now_local.astimezone(timezone.utc)
+offset_raw = now_local.strftime('%z') or '+0000'
+offset_label = f"UTC{offset_raw[:3]}:{offset_raw[3:]}"
+zone_name = now_local.tzname() or offset_label
+
+message = EmailMessage()
+message['Subject'] = f"iDeer SMTP test · {now_local.strftime('%Y-%m-%d %H:%M:%S')} ({offset_label})"
+message['From'] = formataddr(('iDeer', sender))
+message['To'] = ', '.join(receivers)
+message.set_content(
+    '\n'.join([
+        'This is a test email sent by iDeer to verify your SMTP configuration.',
+        '',
+        f'Mode: {mode}',
+        f'SMTP server: {host}:{port}',
+        f'Sender: {sender}',
+        f'Receiver: {", ".join(receivers)}',
+        f'Local time: {now_local.strftime("%Y-%m-%d %H:%M:%S")} ({zone_name}, {offset_label})',
+        f'UTC time: {now_utc.strftime("%Y-%m-%d %H:%M:%S")} (UTC+00:00)',
+    ])
+)
+
+timeout = 20
+smtp = None
+
+try:
+    if port == 465:
+        smtp = smtplib.SMTP_SSL(host, port, timeout=timeout, context=ssl.create_default_context())
+        smtp.ehlo()
+    else:
+        smtp = smtplib.SMTP(host, port, timeout=timeout)
+        smtp.ehlo()
+        if smtp.has_extn('starttls'):
+            smtp.starttls(context=ssl.create_default_context())
+            smtp.ehlo()
+
+    smtp.login(sender, password)
+    smtp.send_message(message)
+    smtp.quit()
+    print('Test email sent to ' + ', '.join(receivers))
+except Exception as exc:
+    try:
+        if smtp is not None:
+            smtp.quit()
+    except Exception:
+        pass
+    raise SystemExit(str(exc))
+"#;
+
+    let mut command = Command::new(&candidate.program);
+    command
+        .args(&candidate.prefix_args)
+        .arg("-c")
+        .arg(SMTP_TEST_SCRIPT)
+        .arg(mode)
+        .arg(host)
+        .arg(port.to_string())
+        .arg(sender)
+        .arg(password)
+        .arg(receiver)
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
+    }
+
+    let output = command.output().map_err(|error| error.to_string())?;
+    if output.status.success() {
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if stdout.is_empty() {
+            Ok(format!("Test email sent to {}", receiver.trim()))
+        } else {
+            Ok(stdout)
+        }
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "SMTP test email failed".into()
+        };
+        Err(detail)
+    }
+}
+
+fn resolve_smtp_test_config(
+    mode: &str,
+    host: &str,
+    port: u16,
+    sender: &str,
+    password: &str,
+) -> Result<(String, u16, String, String), String> {
+    if mode == "managed" {
+        let managed = managed_smtp_config();
+        return Ok((
+            managed.host.to_string(),
+            managed.port,
+            managed.sender.to_string(),
+            managed.password.to_string(),
+        ));
+    }
+
+    let host = host.trim().to_string();
+    let sender = sender.trim().to_string();
+    let password = password.trim().to_string();
+
+    if host.is_empty() {
+        return Err("SMTP host is required".into());
+    }
+    if sender.is_empty() {
+        return Err("sender email is required".into());
+    }
+    if password.is_empty() {
+        return Err("SMTP password is required".into());
+    }
+
+    Ok((host, port, sender, password))
+}
+
 fn open_external_with_system(url: &str) -> Result<(), String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("only http and https urls are supported".into());
@@ -316,17 +483,43 @@ fn read_backend_log() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn test_smtp_connection(host: String, port: u16) -> Result<String, String> {
-    let target = format!("{}:{}", host.trim(), port);
-    let address = target
-        .to_socket_addrs()
-        .map_err(|error| format!("resolve failed: {}", error))?
-        .next()
-        .ok_or_else(|| "no resolved address found".to_string())?;
+fn test_smtp_connection(
+    mode: String,
+    host: String,
+    port: u16,
+    sender: String,
+    password: String,
+    receiver: String,
+) -> Result<String, String> {
+    let receiver = receiver.trim().to_string();
 
-    TcpStream::connect_timeout(&address, Duration::from_secs(5))
-        .map(|_| format!("SMTP connection succeeded: {}", target))
-        .map_err(|error| format!("SMTP connection failed: {}", error))
+    if receiver.is_empty() {
+        return Err("receiver email is required".into());
+    }
+
+    let (host, port, sender, password) =
+        resolve_smtp_test_config(mode.trim(), &host, port, &sender, &password)?;
+
+    let project_root = project_root();
+    let mut last_error: Option<String> = None;
+
+    for candidate in python_candidates() {
+        match run_smtp_test_with_python(
+            &candidate,
+            &project_root,
+            mode.trim(),
+            &host,
+            port,
+            &sender,
+            &password,
+            &receiver,
+        ) {
+            Ok(message) => return Ok(message),
+            Err(error) => last_error = Some(format!("{}: {}", candidate.display_name(), error)),
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| "unable to find a usable python runtime for SMTP test mail".into()))
 }
 
 #[tauri::command]

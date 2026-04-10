@@ -20,6 +20,7 @@ import threading
 class BaseSource(ABC):
     name: str = ""
     default_title: str = "Daily Recommender"
+    managed_sender_address: str = "boming8036881@163.com"
 
     def __init__(self, source_args: dict, llm_config: LLMConfig, common_config: CommonConfig):
         self.llm_config = llm_config
@@ -30,6 +31,7 @@ class BaseSource(ABC):
         self.run_datetime = datetime.now(timezone.utc)
         self.run_date = self.run_datetime.strftime("%Y-%m-%d")
         self.description = common_config.description
+        self.log_level = (common_config.log_level or "standard").lower()
         self.profile_hash = common_config.profile_hash
         self.lock = threading.Lock()
 
@@ -66,6 +68,7 @@ class BaseSource(ABC):
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
         print(f"[{self.name}] Model initialized: {llm_config.model} via {provider}")
+        self._log("verbose", f"[{self.name}] Using interest profile: {self._truncate_for_log(self.description, 320)}")
 
     @staticmethod
     @abstractmethod
@@ -117,6 +120,40 @@ class BaseSource(ABC):
         """Return the max number of items to recommend. Override in subclass."""
         return 30
 
+    def _should_log(self, level: str) -> bool:
+        order = {"progress": 0, "standard": 1, "verbose": 2}
+        current = order.get(self.log_level, 1)
+        target = order.get(level, 1)
+        return current >= target
+
+    def _log(self, level: str, message: str) -> None:
+        if self._should_log(level):
+            print(message)
+
+    @staticmethod
+    def _truncate_for_log(value: str, limit: int = 220) -> str:
+        clean = " ".join(str(value or "").split())
+        if len(clean) <= limit:
+            return clean
+        return clean[: limit - 3] + "..."
+
+    def _item_log_title(self, item: dict) -> str:
+        for key in ("title", "repo_name", "model_id", "name", "arxiv_id", "id"):
+            value = item.get(key)
+            if value:
+                return str(value)
+        text = item.get("text")
+        if text:
+            return self._truncate_for_log(str(text), 80)
+        return "unknown-item"
+
+    def _item_log_preview(self, item: dict) -> str:
+        for key in ("abstract", "description", "summary", "text", "repo_description"):
+            value = item.get(key)
+            if value:
+                return self._truncate_for_log(str(value), 260)
+        return ""
+
     def _load_fetch_cache(self, key: str) -> list[dict] | None:
         """Load shared fetch cache (interest-independent)."""
         from cache_utils import safe_read_json
@@ -154,6 +191,10 @@ class BaseSource(ABC):
 
         while retry_count < max_retries:
             try:
+                self._log("verbose", f"[{self.name}] Reading item: {self._item_log_title(item)}")
+                preview = self._item_log_preview(item)
+                if preview:
+                    self._log("verbose", f"[{self.name}] Item text: {preview}")
                 prompt = self.build_eval_prompt(item)
                 response = self.model.inference(prompt, temperature=self.temperature)
                 result = self.parse_eval_response(item, response)
@@ -245,6 +286,7 @@ class BaseSource(ABC):
     def summarize(self, recommendations: list[dict]) -> str:
         overview = self.build_summary_overview(recommendations)
         fields = self._parse_interest_fields()
+        self._log("verbose", f"[{self.name}] Summary input: {self._truncate_for_log(overview, 400)}")
 
         prompt_context = """
             你是一个有帮助的助手，帮助我追踪热门内容。
@@ -364,7 +406,8 @@ class BaseSource(ABC):
             return formataddr((Header(name, "utf-8").encode(), addr))
 
         msg = MIMEText(html, "html", "utf-8")
-        msg["From"] = _format_addr(f"{title} <{email_config.sender}>")
+        sender_display_name = "iDeer" if email_config.sender.strip().lower() == BaseSource.managed_sender_address else title
+        msg["From"] = _format_addr(f"{sender_display_name} <{email_config.sender}>")
 
         receivers = [addr.strip() for addr in email_config.receiver.split(",")]
         msg["To"] = ",".join([_format_addr(f"You <{addr}>") for addr in receivers])

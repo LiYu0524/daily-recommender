@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit, listen } from "@tauri-apps/api/event";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { ConfigData, UserProfile } from "./types";
+import type { ConfigData, DeliveryMode, UserProfile } from "./types";
 import type { LanguagePreference, ThemePreference } from "./copy";
 
 declare global {
@@ -36,11 +36,18 @@ export async function readManagedBackendLog() {
   return invoke<string>("read_backend_log");
 }
 
-export async function testSmtpConnection(host: string, port: number) {
+export async function testSmtpConnection(
+  mode: "custom" | "managed",
+  host: string,
+  port: number,
+  sender: string,
+  password: string,
+  receiver: string,
+) {
   if (!isTauriDesktop()) {
-    throw new Error("SMTP 连通性测试仅支持桌面客户端。");
+    throw new Error("SMTP 测试邮件仅支持桌面客户端。");
   }
-  return invoke<string>("test_smtp_connection", { host, port });
+  return invoke<string>("test_smtp_connection", { mode, host, port, sender, password, receiver });
 }
 
 export async function minimizeWindow() {
@@ -64,7 +71,7 @@ export async function isWindowMaximized() {
   return getCurrentWindow().isMaximized();
 }
 
-export async function openControlPanelWindow(tab: "profile" | "preferences" | "subscriptions" | "mail" | "info" = "profile") {
+export async function openControlPanelWindow(tab: "profile" | "preferences" | "sources" | "model" | "mail" | "info" = "profile") {
   if (!isTauriDesktop()) {
     return null;
   }
@@ -174,6 +181,7 @@ export async function saveDesktopConfig(config: ConfigData) {
 export async function emitPreferenceChange(payload: {
   languagePreference: LanguagePreference;
   themePreference: ThemePreference;
+  deliveryModePreference: DeliveryMode;
 }) {
   if (!isTauriDesktop()) {
     return;
@@ -196,12 +204,12 @@ export async function emitUserProfileChange(profile: UserProfile) {
 }
 
 export async function listenPreferenceChange(
-  handler: (payload: { languagePreference: LanguagePreference; themePreference: ThemePreference }) => void,
+  handler: (payload: { languagePreference: LanguagePreference; themePreference: ThemePreference; deliveryModePreference: DeliveryMode }) => void,
 ) {
   if (!isTauriDesktop()) {
     return () => {};
   }
-  return listen<{ languagePreference: LanguagePreference; themePreference: ThemePreference }>("ideer://preferences", (event) => {
+  return listen<{ languagePreference: LanguagePreference; themePreference: ThemePreference; deliveryModePreference: DeliveryMode }>("ideer://preferences", (event) => {
     if (event.payload) {
       handler(event.payload);
     }
@@ -230,15 +238,19 @@ export async function listenUserProfileChange(handler: (profile: UserProfile) =>
   });
 }
 
-function panelWindowDimensions(tab: "profile" | "preferences" | "subscriptions" | "mail" | "info") {
+function panelWindowDimensions(tab: "profile" | "preferences" | "sources" | "model" | "mail" | "info") {
   switch (tab) {
     case "info":
       return { width: 560, height: 620 };
     case "profile":
     case "preferences":
-    case "subscriptions":
-    case "mail":
       return { width: 760, height: 860 };
+    case "sources":
+      return { width: 980, height: 900 };
+    case "model":
+      return { width: 920, height: 860 };
+    case "mail":
+      return { width: 920, height: 860 };
     default:
       return { width: 760, height: 860 };
   }
