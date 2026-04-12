@@ -8,8 +8,8 @@ import argparse
 import json
 from datetime import datetime
 
-from sources.base import BaseSource
-from core.config import LLMConfig, CommonConfig
+from base_source import BaseSource
+from config import LLMConfig, CommonConfig
 from fetchers.semanticscholar_fetcher import fetch_papers_for_queries
 from email_utils.base_template import get_stars
 from email_utils.semanticscholar_template import get_paper_block_html
@@ -59,15 +59,38 @@ class SemanticScholarSource(BaseSource):
         if not desc:
             return ["artificial intelligence"]
 
-        lines = [line.strip().lstrip("0123456789.-) ") for line in desc.split("\n") if line.strip()]
-        queries = []
+        lines = [line.strip() for line in desc.split("\n") if line.strip()]
+
+        # First pass: extract numbered items (prioritize specific interests)
+        numbered_queries = []
+        other_lines = []
+
         for line in lines:
-            # Skip negative preference lines
             lower = line.lower()
-            if any(neg in lower for neg in ("not interested", "不感兴趣", "don't", "exclude")):
+            # Skip negative preference lines
+            if any(neg in lower for neg in ("not interested", "不感兴趣", "don't", "exclude", "important:")):
                 continue
+
+            # Check if line starts with a number (e.g., "1.", "2.", "3.")
+            stripped = line.lstrip()
+            if stripped and stripped[0].isdigit():
+                # Extract the content after the number and punctuation
+                content = stripped.lstrip("0123456789.-) ").strip().rstrip("-").strip()
+                if content and len(content) > 2:
+                    numbered_queries.append(content[:120])
+            else:
+                other_lines.append(line)
+
+        # If we found numbered items, use those
+        if numbered_queries:
+            return numbered_queries[:3]
+
+        # Fallback: extract from other lines
+        queries = []
+        for line in other_lines:
+            lower = line.lower()
             # Clean up common prefixes
-            for prefix in ("i'm interested in", "interested in", "关注", "研究"):
+            for prefix in ("i'm interested in", "interested in", "i am working on", "关注", "研究"):
                 if lower.startswith(prefix):
                     line = line[len(prefix):].strip(" :：-")
             if line and len(line) > 2:
