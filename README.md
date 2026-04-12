@@ -164,6 +164,215 @@ bash scripts/run_daily.sh
 
 支持四种推送频率：**每日 / 仅工作日 / 每周 / 每月**。
 
+## Bot 接入（Telegram / 飞书）
+
+除了邮件和 Web UI，iDeer 也支持通过 Telegram / 飞书 Bot 触发任务并接收结果。
+
+定位说明：当前 Bot 是**指令式交互**（Command-driven），不是自由聊天模式。
+
+- 适合：一键触发 `/run`、`/report`、`/ideas` 这类操作
+- 不适合：把 Bot 当成通用对话 Agent 长聊
+
+### 支持的 Bot 命令
+
+| 命令 | 说明 |
+|------|------|
+| `/help` | 查看可用命令 |
+| `/status` | 查看当前模型配置、调度状态 |
+| `/run <sources>` | 运行指定源，如 `/run arxiv github` |
+| `/report` | 运行全部源并生成跨源报告 |
+| `/ideas` | 运行全部源并生成研究想法 |
+
+说明：
+
+- `/run` 会保存并回传当次 source 结果（如 `arxiv_email.html`）
+- `/report` 会优先回传跨源报告
+- 长文本会自动切块发送，避免消息长度限制导致截断
+
+### Telegram Bot 配置
+
+**第一步：创建 Bot**
+
+1. 在 Telegram 中搜索 [@BotFather](https://t.me/BotFather)，发送 `/newbot`
+2. 按提示设置 Bot 名称，获得 Bot Token（格式如 `123456:ABC-DEF...`）
+3. 可选：发送 `/setcommands` 设置命令菜单：
+   ```
+   help - 查看可用命令
+   status - 查看配置状态
+   run - 运行推荐管线
+   report - 生成跨源报告
+   ideas - 生成研究想法
+   ```
+
+**第二步：配置 iDeer**
+
+在 `.env` 中添加：
+
+```bash
+BOT_TELEGRAM_ENABLED=1
+BOT_TELEGRAM_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+BOT_TELEGRAM_WEBHOOK_SECRET=your-random-secret-string
+```
+
+`BOT_TELEGRAM_WEBHOOK_SECRET` 是你自定义的随机字符串，用于校验 Telegram 回调请求，建议 32 字节以上随机值（例如 `openssl rand -hex 32` 生成）。
+
+**第三步：设置 Webhook**
+
+启动 web server 后，用 curl 告诉 Telegram 你的 webhook 地址：
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://your-domain.com/bot/telegram/webhook",
+    "secret_token": "your-random-secret-string"
+  }'
+```
+
+建议再执行一次查询确认：
+
+```bash
+curl "https://api.telegram.org/bot<YOUR_TOKEN>/getWebhookInfo"
+```
+
+> Telegram webhook 要求 HTTPS。如果你有公网域名 + 证书，直接用域名即可。如果是本地开发，参考下方「本地开发：用 ngrok 暴露 Webhook」章节。
+
+**第四步：验证**
+
+在 Telegram 中给你的 Bot 发送 `/help`，应收到命令列表。再发送 `/run arxiv`，应看到：
+
+1. 进度消息
+2. 任务完成提示
+3. 结果附件或文本摘要
+
+### 本地开发：用 ngrok 暴露 Webhook
+
+Telegram 和飞书的 webhook 都要求公网 HTTPS 地址。本地开发时可以用 [ngrok](https://ngrok.com/) 把本机端口暴露到公网。
+
+**安装 ngrok**
+
+```bash
+# macOS
+brew install ngrok
+
+# Linux (snap)
+snap install ngrok
+
+# 或直接下载：https://ngrok.com/download
+```
+
+首次使用需要注册并配置 authtoken：
+
+```bash
+ngrok config add-authtoken <YOUR_NGROK_AUTHTOKEN>
+```
+
+**启动隧道**
+
+iDeer web server 默认端口是 `8090`，ngrok 必须指向同一端口：
+
+```bash
+# 先启动 iDeer web server
+python web_server.py   # 默认监听 8090
+
+# 另开一个终端，启动 ngrok
+ngrok http 8090
+```
+
+ngrok 启动后会显示公网地址，类似：
+
+```
+Forwarding  https://xxxx-xxxx.ngrok-free.app -> http://localhost:8090
+```
+
+**用 ngrok 地址设置 Telegram Webhook**
+
+```bash
+curl -X POST "https://api.telegram.org/bot<YOUR_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://xxxx-xxxx.ngrok-free.app/bot/telegram/webhook",
+    "secret_token": "your-random-secret-string"
+  }'
+```
+
+飞书同理，把事件订阅的请求地址设为 `https://xxxx-xxxx.ngrok-free.app/bot/feishu/webhook`。
+
+> 注意：ngrok 免费版每次重启会分配新地址，需要重新设置 webhook。端口不匹配（如 ngrok 指向 80 但 server 跑在 8090）会导致 502 Bad Gateway。
+
+### 飞书 Bot 配置
+
+**第一步：创建飞书应用**
+
+1. 登录 [飞书开放平台](https://open.feishu.cn/app)，创建企业自建应用
+2. 在「凭证与基础信息」页获取 App ID 和 App Secret
+3. 在「事件订阅」页面：
+   - 设置请求地址为 `https://your-domain.com/bot/feishu/webhook`
+   - 获取 Verification Token 和 Encrypt Key
+   - 添加事件：`im.message.receive_v1`（接收消息）
+4. 在「权限管理」中开通：`im:message`（获取与发送消息）、`im:resource`（上传文件）
+5. 发布应用版本并等待审批通过
+
+**第二步：配置 iDeer**
+
+在 `.env` 中添加：
+
+```bash
+BOT_FEISHU_ENABLED=1
+BOT_FEISHU_APP_ID=cli_xxxxxxxxxxxx
+BOT_FEISHU_APP_SECRET=xxxxxxxxxxxxxxxxxxxxxxxx
+BOT_FEISHU_VERIFICATION_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+BOT_FEISHU_ENCRYPT_KEY=xxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+**第三步：验证**
+
+启动 web server，飞书开放平台会自动发送 challenge 验证请求。验证通过后，在飞书中给 Bot 发送 `/help` 即可。
+
+### 通用配置项
+
+以下配置项对两个平台通用，在 `.env` 中设置：
+
+```bash
+# 速率限制：每秒最多接受的请求数（默认 5）
+# BOT_RATE_LIMIT_RPS=5
+
+# 请求体大小限制（默认 1MB）
+# BOT_MAX_BODY_BYTES=1048576
+
+# 白名单：只允许指定 chat_id 使用 Bot（逗号分隔，留空则不限制）
+# BOT_ALLOW_FROM=chat_id_1,chat_id_2
+```
+
+说明：
+
+- `BOT_ALLOW_FROM` 为空时表示不限制
+- Telegram 填 `chat_id`
+- 飞书填对应会话 `chat_id`
+
+### 健康检查
+
+Bot 路由挂载后，可通过 `GET /bot/health` 检查状态：
+
+```bash
+curl https://your-domain.com/bot/health
+# {"telegram_enabled": true, "feishu_enabled": false, "active_tasks": 0}
+```
+
+### 常见问题
+
+**Q1：配置了 BOT_TELEGRAM_TOKEN 但 Bot 不回复？**
+
+A：通常是 webhook 没有正确设置到 `/bot/telegram/webhook`，或地址不是公网 HTTPS。先用 `getWebhookInfo` 检查。
+
+**Q2：为什么收到 `Pipeline completed` 但没有结果内容？**
+
+A：请确认服务已重启到最新代码，并检查 `history/<source>/<date>/` 是否有 `*.html` / `*.md` 产物。Bot 会优先发送 HTML 附件，其次发送文本摘要。
+
+**Q3：Bot 能不能自由聊天？**
+
+A：当前实现是指令式模式，只处理 `/help`、`/status`、`/run`、`/report`、`/ideas` 等命令。
+
 ## 架构
 
 ```
@@ -181,7 +390,9 @@ bash scripts/run_daily.sh
                                ↓            ↓            ↓
                             📰 日报    📋 跨源简报   💡 Ideas
                                ↓            ↓            ↓
-                                      📧 邮件投喂
+                               ├────── 📧 邮件投喂 ──────┤
+                               ├── 🤖 Telegram Bot ──────┤
+                               └── 🐦 飞书 Bot ──────────┘
                                             ↓
                               ┌─────────────────────────────┐
                               │  ⏰ 定时推送（支持仅工作日）  │
@@ -192,6 +403,7 @@ bash scripts/run_daily.sh
 
 - **🖥️ Web UI** — 内置 FastAPI 后端 + WebSocket 实时日志，浏览器里跑
 - **⏰ 定时推送** — 每日 / 仅工作日 / 每周 / 每月，Admin 页面一键配置
+- **🤖 Bot 接入** — Telegram / 飞书 Bot，发命令触发报告，Bot 直接返回结果
 - **🎓 多 Scholar 画像** — 同时关联多个 Google Scholar 账户，合并发表记录
 - **🖥️ 桌面客户端** — 本地 GUI 体验（见 [Desktop Demo](./docs/DESKTOP_DEMO.md)）
 - **🔌 Claude Code Skill** — 支持作为 Claude Code 技能集成

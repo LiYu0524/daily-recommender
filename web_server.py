@@ -83,6 +83,10 @@ DEFAULT_CONFIG = {
 
 app = FastAPI(title="Daily Recommender API", version="1.0.0")
 
+# Bot integration (Telegram / Feishu)
+from bot import setup_bot_routes
+setup_bot_routes(app)
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -414,7 +418,7 @@ class RunRequest(BaseModel):
     researcher_profile: str = ""
     scholar_urls: str = ""
     x_accounts_input: str = ""
-    delivery_mode: Literal["source_emails", "combined_report", "both"] = "source_emails"
+    delivery_mode: Literal["source_emails", "combined_report", "both", "save_only"] = "source_emails"
 
 
 # ============== Config API ==============
@@ -503,7 +507,9 @@ async def run_daily_recommender(req: RunRequest):
     if not req.sources:
         raise ValueError("请至少选择一个信息源。")
 
-    today = datetime.now().strftime("%Y-%m-%d")
+    local_today = datetime.now().strftime("%Y-%m-%d")
+    utc_today = datetime.utcnow().strftime("%Y-%m-%d")
+    date_candidates = list(dict.fromkeys([local_today, utc_today]))
     result_dirs: list[Path] = []
     config = load_config_data()
     temp_dir = tempfile.TemporaryDirectory(prefix="daily-recommender-web-")
@@ -568,7 +574,7 @@ async def run_daily_recommender(req: RunRequest):
 
         should_generate_report = req.generate_report or req.delivery_mode in ("combined_report", "both")
         should_send_combined_report = req.delivery_mode in ("combined_report", "both")
-        should_skip_source_emails = req.delivery_mode == "combined_report"
+        should_skip_source_emails = req.delivery_mode in ("combined_report", "save_only")
 
         if should_send_combined_report and not receiver:
             raise ValueError("请输入接收邮件的邮箱地址。")
@@ -607,7 +613,8 @@ async def run_daily_recommender(req: RunRequest):
 
         if should_generate_report:
             cmd.append("--generate_report")
-            result_dirs.append(HISTORY_DIR / "reports" / today)
+            for d in date_candidates:
+                result_dirs.append(HISTORY_DIR / "reports" / d)
             if report_profile_path:
                 _append_arg(cmd, "--report_profile", report_profile_path)
             if should_send_combined_report:
@@ -619,7 +626,8 @@ async def run_daily_recommender(req: RunRequest):
             if not researcher_profile_path:
                 raise ValueError("生成研究想法需要研究者画像。")
             cmd.extend(["--generate_ideas", "--researcher_profile", str(researcher_profile_path)])
-            result_dirs.append(HISTORY_DIR / "ideas" / today)
+            for d in date_candidates:
+                result_dirs.append(HISTORY_DIR / "ideas" / d)
 
         _append_arg(cmd, "--smtp_server", config.get("smtp_server"))
         _append_arg(cmd, "--smtp_port", config.get("smtp_port"))
@@ -716,16 +724,52 @@ async def run_daily_recommender(req: RunRequest):
         await process.wait()
 
         for src in req.sources:
-            result_dirs.append(HISTORY_DIR / src / today)
+            for d in date_candidates:
+                result_dirs.append(HISTORY_DIR / src / d)
 
-        generated_files = _collect_generated_files(result_dirs)
+        # De-duplicate candidate directories while preserving order.
+        dedup_result_dirs: list[Path] = []
+        seen_dirs: set[str] = set()
+        for p in result_dirs:
+            key = str(p)
+            if key in seen_dirs:
+                continue
+            seen_dirs.add(key)
+            dedup_result_dirs.append(p)
+
+        generated_files = _collect_generated_files(dedup_result_dirs)
+
+        def _date_has_artifacts(date_str: str) -> bool:
+            candidate_dirs: list[Path] = []
+            for src in req.sources:
+                candidate_dirs.append(HISTORY_DIR / src / date_str)
+            if should_generate_report:
+                candidate_dirs.append(HISTORY_DIR / "reports" / date_str)
+            if req.generate_ideas:
+                candidate_dirs.append(HISTORY_DIR / "ideas" / date_str)
+
+            for d in candidate_dirs:
+                if not d.exists() or not d.is_dir():
+                    continue
+                has_md = any(d.glob("*.md"))
+                has_html = any(d.glob("*.html"))
+                has_json = (d / "json").exists() and any((d / "json").glob("*.json"))
+                if has_md or has_html or has_json:
+                    return True
+            return False
+
+        resolved_date = local_today
+        for d in date_candidates:
+            if _date_has_artifacts(d):
+                resolved_date = d
+                break
 
         yield {
             "type": "complete",
             "exit_code": process.returncode,
             "success": process.returncode == 0,
             "files": generated_files,
-            "date": today,
+            "date": resolved_date,
         }
     finally:
         temp_dir.cleanup()
