@@ -322,6 +322,44 @@ Requirements:
         return cleaned.strip()
 
     @staticmethod
+    def _safe_slug(text: str, limit: int = 32) -> str:
+        compact = re.sub(r"\s+", " ", str(text or "").strip())
+        return compact[:limit].rstrip(" /-_")
+
+    def _parse_json_object(self, raw: str) -> dict[str, Any] | None:
+        cleaned = self._clean_llm_json(raw)
+        if not cleaned:
+            return None
+
+        try:
+            data = json.loads(cleaned)
+        except json.JSONDecodeError:
+            return None
+
+        return data if isinstance(data, dict) else None
+
+    def _build_repair_prompt(self, invalid_json: str) -> str:
+        return f"""You are fixing invalid JSON produced by another model.
+
+Return valid JSON only. No markdown fence. No commentary.
+Keep the original meaning, preserve Chinese text, and keep the same schema.
+If a field is missing, keep it as an empty string, empty array, or empty object as appropriate.
+Do not add any fields outside the schema.
+
+Invalid JSON:
+{invalid_json}
+"""
+
+    def _repair_report_json(self, invalid_json: str) -> dict[str, Any] | None:
+        print("[ReportGenerator] Attempting JSON repair pass.")
+        repair_prompt = self._build_repair_prompt(invalid_json)
+        repaired_raw = self.model.inference(repair_prompt, temperature=0.0)
+        repaired = self._parse_json_object(repaired_raw)
+        if repaired is None:
+            print("[ReportGenerator] JSON repair pass failed.")
+        return repaired
+
+    @staticmethod
     def _normalize_signal(signal: dict[str, Any]) -> dict[str, str]:
         return {
             "source": str(signal.get("source", "")).strip(),
@@ -342,6 +380,112 @@ Requirements:
                 }
             )
         return signals
+
+    def _build_fallback_report(self, filtered_items: list[dict], reason: str) -> dict[str, Any]:
+        top_items = filtered_items[: max(1, min(self.max_items, len(filtered_items)))]
+        source_counts: dict[str, int] = {}
+        for item in top_items:
+            source_counts[item["source"]] = source_counts.get(item["source"], 0) + 1
+
+        source_line = " / ".join(
+            item["source_label"] for item in top_items[:3] if item.get("source_label")
+        )
+        top_titles = "、".join(self._safe_slug(item.get("title", "")) for item in top_items[:3])
+        opening = (
+            f"今天的高分信号主要来自 {source_line or '多源'}。"
+            f"当前最值得优先关注的条目包括 {top_titles}。"
+            f"这份版本基于已完成的抓取与评分结果自动整理，重点保留了可直接阅读的主线、观察点和后续跟踪对象。"
+        )
+
+        themes = []
+        for item in top_items[: self.theme_count]:
+            detail = str(item.get("summary", "")).strip() or str(item.get("detail", "")).strip()
+            if not detail:
+                detail = "该条目在今天的筛选结果中得分较高，值得继续跟踪。"
+            narrative = (
+                f"{item.get('source_label', item.get('source', ''))} 信号里，"
+                f"《{item.get('title', 'Untitled')}》是今天的重点条目之一。"
+                f"{detail}"
+            )
+            themes.append(
+                {
+                    "title": self._safe_slug(item.get("title", "Untitled"), limit=48) or "今日重点信号",
+                    "narrative": narrative,
+                    "signals": [
+                        {
+                            "source": str(item.get("source", "")),
+                            "title": str(item.get("title", "")),
+                            "why_it_matters": detail,
+                            "url": str(item.get("url", "")),
+                        }
+                    ],
+                }
+            )
+
+        predictions = []
+        for item in top_items[: self.prediction_count]:
+            predictions.append(
+                {
+                    "prediction": f"{self._safe_slug(item.get('title', '该主题'), limit=40)} 相关讨论会继续升温",
+                    "time_horizon": "1-2周",
+                    "confidence": "中",
+                    "rationale": (
+                        f"该条目来自 {item.get('source_label', item.get('source', ''))}，"
+                        f"在今日结果中得分为 {item.get('score', 0)}，并进入了高优先级筛选。"
+                    ),
+                }
+            )
+
+        ideas = []
+        for item in top_items[: self.idea_count]:
+            ideas.append(
+                {
+                    "title": f"围绕 {self._safe_slug(item.get('title', '该主题'), limit=28)} 做一次定向跟踪",
+                    "detail": (
+                        f"把该条目加入后续观察清单，继续跟踪相关 repo、论文、讨论和社区反馈，"
+                        "补齐背景脉络和潜在应用机会。"
+                    ),
+                    "why_now": "它已经在今天的多源筛选中进入高分区，短期内最有继续跟踪价值。",
+                }
+            )
+
+        watchlist = []
+        for item in top_items[:5]:
+            reason_text = str(item.get("summary", "")).strip() or str(item.get("detail", "")).strip()
+            watchlist.append(
+                {
+                    "item": self._safe_slug(item.get("title", "Untitled"), limit=52) or "重点条目",
+                    "reason": reason_text or "今天的多源筛选结果中优先级较高。",
+                }
+            )
+
+        return {
+            "report_title": self.report_title or "今日多源趋势速递",
+            "subtitle": "基于已完成抓取结果生成的稳定版自动汇总",
+            "opening": opening,
+            "themes": themes,
+            "interpretation": {
+                "thesis": (
+                    "今天的信号重心比较明确：高分内容集中在少数几个最强条目上，"
+                    "适合先围绕这些对象做连续追踪，而不是平均分配注意力。"
+                ),
+                "implications": (
+                    "这份报告是降级生成版本，用来保证定时任务稳定产出。"
+                    "即使模型返回了不完整 JSON，核心观察和后续跟踪对象仍然被保留下来。"
+                ),
+            },
+            "predictions": predictions,
+            "ideas": ideas,
+            "watchlist": watchlist,
+            "metadata": {
+                "date": self.run_date,
+                "generated_at": self.run_datetime.isoformat(),
+                "source_counts": source_counts,
+                "input_item_count": len(filtered_items),
+                "generation_mode": "fallback",
+                "fallback_reason": reason,
+            },
+        }
 
     def _normalize_report(self, data: dict[str, Any], filtered_items: list[dict]) -> dict[str, Any]:
         title = str(data.get("report_title", "")).strip() or self.report_title
@@ -474,17 +618,26 @@ Requirements:
         prompt = self._build_prompt(filtered)
         raw = self.model.inference(prompt, temperature=self.llm_config.temperature)
         cleaned = self._clean_llm_json(raw)
+        data = self._parse_json_object(cleaned)
 
-        try:
-            data = json.loads(cleaned)
-        except json.JSONDecodeError as e:
-            print(f"[ReportGenerator] Failed to parse report JSON: {e}")
+        if data is None:
+            try:
+                json.loads(cleaned)
+            except json.JSONDecodeError as e:
+                print(f"[ReportGenerator] Failed to parse report JSON: {e}")
+            else:
+                print("[ReportGenerator] LLM response is not a JSON object.")
             print(f"[ReportGenerator] Raw response (first 600 chars): {cleaned[:600]}")
-            return None
+            data = self._repair_report_json(cleaned)
 
-        if not isinstance(data, dict):
-            print("[ReportGenerator] LLM response is not a JSON object.")
-            return None
+        if data is None:
+            print("[ReportGenerator] Falling back to deterministic report rendering.")
+            report = self._build_fallback_report(
+                filtered,
+                reason="llm_report_json_invalid",
+            )
+            report["input_items"] = filtered
+            return report
 
         report = self._normalize_report(data, filtered)
         report["input_items"] = filtered
