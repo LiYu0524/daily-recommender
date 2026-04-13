@@ -123,6 +123,10 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 
 没有服务器、也不想自己配运行环境的话，可以直接用仓库自带的 GitHub Actions 工作流定时生成跨源报告，并把最终报告邮件发到你的邮箱。
 
+详细教程：
+
+- [从 fork 到每天自动收邮件的完整配置指南](./docs/github-actions-report-guide.md)
+
 工作流文件：
 
 - `.github/workflows/scheduled-report-email.yml`
