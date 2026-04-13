@@ -216,7 +216,7 @@ def main():
     # --- run ---
     p_run = sub.add_parser("run", help="Run the daily recommender pipeline")
     p_run.add_argument("--sources", nargs="+",
-                       choices=["github", "huggingface", "twitter", "arxiv", "semanticscholar"],
+                       choices=["github", "huggingface", "twitter", "arxiv", "semanticscholar", "pubmed"],
                        help="Information sources to run")
     p_run.add_argument("--save", action="store_true", default=True, help="Save results to history (default: true)")
     p_run.add_argument("--no-save", dest="save", action="store_false", help="Don't save results")
@@ -229,7 +229,7 @@ def main():
 
     # --- fetch ---
     p_fetch = sub.add_parser("fetch", help="Fetch items from a source (JSON to stdout)")
-    p_fetch.add_argument("source", choices=["arxiv", "huggingface", "github", "semanticscholar", "twitter"])
+    p_fetch.add_argument("source", choices=["arxiv", "huggingface", "github", "semanticscholar", "twitter", "pubmed"])
     p_fetch.add_argument("--categories", nargs="+", default=None)
     p_fetch.add_argument("--max", type=int, default=30)
     p_fetch.add_argument("--queries", nargs="+", default=None)

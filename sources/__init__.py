@@ -3,6 +3,7 @@ from sources.huggingface_source import HuggingFaceSource
 from sources.twitter_source import TwitterSource
 from sources.arxiv_source import ArxivSource
 from sources.semanticscholar_source import SemanticScholarSource
+from sources.pubmed_source import PubMedSource
 
 SOURCE_REGISTRY = {
     "github": GitHubSource,
@@ -10,4 +11,5 @@ SOURCE_REGISTRY = {
     "twitter": TwitterSource,
     "arxiv": ArxivSource,
     "semanticscholar": SemanticScholarSource,
+    "pubmed": PubMedSource,
 }

@@ -228,7 +228,7 @@ def main():
     # --- fetch: run a fetcher and print JSON ---
     p_fetch = sub.add_parser("fetch", help="Run a fetcher and print JSON to stdout")
     p_fetch.add_argument("source", choices=["arxiv", "huggingface", "github",
-                                             "semanticscholar", "twitter"])
+                                             "semanticscholar", "twitter", "pubmed"])
     p_fetch.add_argument("--categories", nargs="+", default=["cs.AI"])
     p_fetch.add_argument("--max", type=int, default=30)
     p_fetch.add_argument("--queries", nargs="+", default=[])
@@ -317,6 +317,11 @@ def _run_fetcher(args) -> list:
         from fetchers.semanticscholar_fetcher import fetch_papers_for_queries
         queries = args.queries or ["artificial intelligence"]
         return fetch_papers_for_queries(queries, max_results_per_query=args.max)
+
+    elif args.source == "pubmed":
+        from fetchers.pubmed_fetcher import fetch_papers_for_queries
+        queries = args.queries or ["biomedical"]
+        return fetch_papers_for_queries(queries, max_results_per_query=args.max, days=7)
 
     elif args.source == "twitter":
         print("Twitter requires API key — use fetchers/twitter_fetcher.py directly",
