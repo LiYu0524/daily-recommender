@@ -82,3 +82,40 @@ export const SOURCE_META: Record<
     description: '跨期刊学术论文，WoS 替代方案。',
   },
 };
+
+// --- Admin history constants ---
+
+export const TYPE_COLORS: Record<string, string> = {
+  github: 'bg-slate-800',
+  huggingface: 'bg-yellow-500',
+  twitter: 'bg-black',
+  arxiv: 'bg-red-700',
+  semanticscholar: 'bg-purple-600',
+  report: 'bg-emerald-600',
+  ideas: 'bg-orange-500',
+  daily: 'bg-blue-500',
+};
+
+export const TYPE_ICONS: Record<string, string> = {
+  github: 'GH',
+  huggingface: 'HF',
+  twitter: 'X',
+  arxiv: 'Ax',
+  semanticscholar: 'SS',
+  report: 'R',
+  ideas: 'I',
+  daily: 'D',
+};
+
+export const TYPE_LABELS: Record<string, string> = {
+  github: 'GitHub 推荐',
+  huggingface: 'HuggingFace 推荐',
+  twitter: 'Twitter 推荐',
+  arxiv: 'arXiv 论文',
+  semanticscholar: 'Semantic Scholar',
+  report: '综合报告',
+  ideas: '研究想法',
+  daily: '每日推荐',
+};
+
+export const ADMIN_SOURCES = ['github', 'huggingface', 'twitter', 'arxiv', 'semanticscholar'] as const;

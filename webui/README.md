@@ -21,7 +21,7 @@ npm run dev
 # 构建
 npm run build
 
-# 预览构建产物
+# 预览构建结果
 npm run preview
 ```
 
@@ -32,25 +32,8 @@ npm run preview
 | 路由       | 说明                 | 状态     |
 | ---------- | -------------------- | -------- |
 | `/`        | 公开页 -- 触发运行和查看结果 | 已完成   |
-| `/admin`   | 管理后台             | 待开发   |
+| `/admin`   | 管理后台 -- 配置/控制台/历史 | 已完成   |
 | `/desktop` | 桌面端嵌入           | 待开发   |
-
-### 公开页功能
-
-- **Quick / Custom 两种模式** -- Quick 模式只需输入邮箱，Custom 模式支持自定义 profile、Scholar 链接和 X 账号
-- **数据源选择** -- GitHub、HuggingFace、arXiv、Semantic Scholar、Research Ideas，以及按后端配置动态启用的 Twitter/X
-- **投递方式切换** -- 按数据源分开发送、合并汇总报告、两者都发
-- **实时进度** -- 通过 WebSocket 接收运行日志，显示进度条和状态文本
-- **结果查看** -- 运行完成后展示生成的文件列表，支持 Markdown 渲染
-- **Desktop 嵌入** -- 检测 URL 参数 `?embed=1`，自动切换为桌面端布局
-
-### 通用能力
-
-- `useMeta` -- 获取后端配置（GitHub 仓库地址、Twitter 是否启用、邮箱是否可用）
-- `useWebSocket` -- 通用 WebSocket 连接管理
-- `useToast` -- 全局通知（success / warning / error）
-- `MarkdownRender` -- 基础 Markdown 渲染组件
-- SMTP 未配置时在页面顶部显示警告提示
 
 ## 项目结构
 
@@ -64,17 +47,17 @@ src/
     Toast.tsx                      # 通知组件
   lib/
     api.ts                         # HTTP / WebSocket 通信层
-    types.ts                       # 类型定义
-    constants.ts                   # 常量
+    types.ts                       # 类型定义（含 AdminConfig / HistoryEntry 等）
+    constants.ts                   # 常量（含 TYPE_COLORS / TYPE_LABELS 等）
     utils.ts                       # 工具函数
     hooks/
-      useMeta.ts                   # 后端配置获取
+      useMeta.ts                   # 公开页元信息获取
       useWebSocket.ts              # WebSocket 管理
       useToast.tsx                 # 通知状态
       useDesktopEmbed.ts           # 桌面嵌入检测
-      useConfig.ts                 # 配置管理（待实现）
-      useHistory.ts                # 历史记录（待实现）
-      useRunState.ts               # 运行状态（待实现）
+      useConfig.ts                 # 配置加载/编辑/保存
+      useHistory.ts                # 历史记录加载
+      useRunState.ts               # WebSocket 运行生命周期
   pages/
     public/
       PublicPage.tsx               # 公开页主组件
@@ -89,6 +72,28 @@ src/
         RunProgress.tsx            # 运行进度条
         ResultPanel.tsx            # 结果面板
         FileCard.tsx               # 文件卡片
-    admin/                         # 管理后台（待开发）
+    admin/                         # 管理后台
+      AdminPage.tsx                # 顶层编排（Tab 切换 + Hook 调用）
+      components/
+        Header.tsx                 # 导航栏 + Tab 按钮
+        config/                    # 配置 Tab
+          ConfigView.tsx           # 配置容器 + 保存按钮
+          LLMConfig.tsx            # LLM 配置（Provider / Model / Key 等）
+          EmailConfig.tsx          # 邮件配置（SMTP）
+          SourceConfig.tsx         # 信息源配置（GitHub / HF / Twitter / arXiv / SS）
+          InterestConfig.tsx       # 兴趣描述
+          ProfileConfig.tsx        # 研究者画像
+          ScheduleConfig.tsx       # 定时推送
+        dashboard/                 # 控制台 Tab
+          DashboardView.tsx        # 控制台容器
+          QuickActions.tsx         # 快速运行 / 生成报告 / 研究想法
+          SourceSelection.tsx      # 数据源选择网格
+          SourceCard.tsx           # 数据源卡片（含配置摘要）
+          RunPanel.tsx             # 运行进度 + 日志 + 取消
+          ResultsPanel.tsx         # 运行结果展示
+        records/                   # 历史 Tab
+          HistoryView.tsx          # 历史记录容器 + 筛选
+          HistoryList.tsx          # 历史卡片列表
+          ResultModal.tsx          # 结果详情弹窗
     desktop/                       # 桌面端（待开发）
 ```

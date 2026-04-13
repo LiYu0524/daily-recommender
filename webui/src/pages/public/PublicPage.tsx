@@ -26,6 +26,7 @@ export function PublicPage() {
   const ws = useWebSocket('/ws/run');
 
   const [mode, setMode] = useState<'quick' | 'custom'>('quick');
+  const [modeKey, setModeKey] = useState(0);
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>('combined_report');
   const [selectedSources, setSelectedSources] = useState<Set<string>>(
     () => new Set(['github', 'huggingface']),
@@ -211,7 +212,7 @@ export function PublicPage() {
 
       <Header
         mode={mode}
-        onModeChange={setMode}
+        onModeChange={(m) => { setMode(m); setModeKey((k) => k + 1); }}
         meta={meta}
         isDesktopEmbed={isDesktopEmbed}
       />
@@ -219,7 +220,7 @@ export function PublicPage() {
       <main
         className={`mx-auto max-w-6xl px-4 py-10 md:px-8 md:py-14 ${isDesktopEmbed ? '!max-w-none px-6 py-7' : ''}`}
       >
-        <section className="space-y-6">
+        <section key={modeKey} className="page-enter space-y-6">
           <HeroSection />
 
           <MailWarning visible={!meta.mail_enabled} />

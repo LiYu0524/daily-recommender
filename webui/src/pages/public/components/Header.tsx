@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { PublicMeta } from '../../../lib/types';
 
 interface HeaderProps {
@@ -8,6 +9,10 @@ interface HeaderProps {
 }
 
 export function Header({ mode, onModeChange, meta, isDesktopEmbed }: HeaderProps) {
+  const quickRef = useRef<HTMLButtonElement>(null);
+  const customRef = useRef<HTMLButtonElement>(null);
+  const activeRef = mode === 'quick' ? quickRef : customRef;
+
   return (
     <header className="sticky top-0 z-40 border-b border-white/60 bg-white/70 backdrop-blur-xl">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-8">
@@ -26,11 +31,26 @@ export function Header({ mode, onModeChange, meta, isDesktopEmbed }: HeaderProps
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="glass-panel flex rounded-2xl border border-slate-200/80 p-1 shadow-soft">
+          <div className="glass-panel relative flex rounded-2xl border border-slate-200/80 p-1 shadow-soft">
+            {/* Sliding indicator */}
+            <span
+              className="absolute top-1 rounded-xl bg-slate-900 text-white shadow-lg transition-all duration-250 ease-out"
+              style={
+                activeRef.current
+                  ? {
+                      left: activeRef.current.offsetLeft,
+                      top: activeRef.current.offsetTop,
+                      width: activeRef.current.offsetWidth,
+                      height: activeRef.current.offsetHeight,
+                    }
+                  : undefined
+              }
+            />
             <button
+              ref={quickRef}
               type="button"
-              className={`mode-toggle flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600`}
-              data-active={mode === 'quick'}
+              className="relative z-10 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-200"
+              style={{ color: mode === 'quick' ? 'white' : '#475569' }}
               onClick={() => onModeChange('quick')}
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -39,9 +59,10 @@ export function Header({ mode, onModeChange, meta, isDesktopEmbed }: HeaderProps
               快速版
             </button>
             <button
+              ref={customRef}
               type="button"
-              className={`mode-toggle flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600`}
-              data-active={mode === 'custom'}
+              className="relative z-10 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-colors duration-200"
+              style={{ color: mode === 'custom' ? 'white' : '#475569' }}
               onClick={() => onModeChange('custom')}
             >
               <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
