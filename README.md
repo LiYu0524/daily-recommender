@@ -574,6 +574,16 @@ iDeer 的灵感和实现受益于以下优秀的开源项目：
 
 ---
 
+## 社区交流
+
+欢迎进群讨论、反馈问题、交流用法，也欢迎直接提 PR 一起把 iDeer 做得更好。
+
+<div align="center">
+  <img src="./docs/ideer-wechat-group.jpg" alt="iDeer 微信交流群二维码" width="360" />
+</div>
+
+---
+
 <div align="center">
 
 **如果这只鹿帮你省了时间，给它一颗 ⭐**
