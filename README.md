@@ -119,6 +119,99 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 
 搞定。去 `history/` 看产出。
 
+### 方式三：GitHub Actions 定时报告（无需服务器）
+
+没有服务器、也不想自己配运行环境的话，可以直接用仓库自带的 GitHub Actions 工作流定时生成跨源报告，并把最终报告邮件发到你的邮箱。
+
+工作流文件：
+
+- `.github/workflows/scheduled-report-email.yml`
+
+默认行为：
+
+- 在 GitHub Hosted Runner 上直接运行
+- 只发送一封**跨源报告邮件**
+- 不发送每个 source 的单独邮件
+- 把 `history/reports/` 作为 artifact 保留下来，方便下载查看
+- 默认源是 `github + arxiv + semanticscholar + huggingface`
+- 默认定时是 `UTC 00:00`，对应**北京时间 08:00**
+
+#### 必填 Secrets
+
+| Secret | 用途 | 说明 |
+|------|------|------|
+| `IDEER_MODEL_NAME` | 模型名 | 例如 `gpt-4o-mini`、`Qwen/Qwen2.5-72B-Instruct` |
+| `IDEER_BASE_URL` | 模型 API 地址 | 例如 `https://api.openai.com/v1` 或兼容 OpenAI 的网关 |
+| `IDEER_API_KEY` | 模型 API Key | 用于 LLM 调用 |
+| `IDEER_SMTP_SERVER` | SMTP 服务器 | 例如 `smtp.gmail.com` |
+| `IDEER_SMTP_PORT` | SMTP 端口 | 常见是 `465` 或 `587` |
+| `IDEER_SMTP_SENDER` | 发件邮箱 | 发送日报的邮箱 |
+| `IDEER_SMTP_RECEIVER` | 收件邮箱 | 默认接收日报的邮箱 |
+| `IDEER_SMTP_PASSWORD` | SMTP 密码 / 应用专用密码 | 邮箱授权密码 |
+| `IDEER_DESCRIPTION_TEXT` | 你的兴趣描述 | 这是推荐和报告筛选的核心输入 |
+
+#### 推荐填写的 Secrets
+
+| Secret | 用途 | 默认值 / 示例 |
+|------|------|------|
+| `IDEER_PROVIDER` | LLM provider | 默认 `openai` |
+| `IDEER_TEMPERATURE` | 采样温度 | 默认 `0.5` |
+| `IDEER_DAILY_SOURCES` | 选择要跑哪些源 | 默认 `github arxiv semanticscholar huggingface` |
+| `IDEER_REPORT_TITLE` | 邮件标题 | 默认 `Daily Personal Briefing` |
+| `IDEER_RESEARCHER_PROFILE_TEXT` | 更完整的研究者画像 | 会用于报告生成 |
+| `IDEER_NUM_WORKERS` | 并发 worker 数 | 默认 `6`，GitHub Actions 上不建议盲目调太高 |
+
+#### 按数据源填写的可选 Secrets
+
+| Secret | 何时需要 | 说明 |
+|------|------|------|
+| `IDEER_ARXIV_CATEGORIES` | 你启用了 arXiv 时 | 例如 `cs.AI cs.CL cs.LG` |
+| `IDEER_ARXIV_MAX_ENTRIES` | 你启用了 arXiv 时 | 原始抓取数量上限 |
+| `IDEER_ARXIV_MAX_PAPERS` | 你启用了 arXiv 时 | 最终推荐论文数量上限 |
+| `IDEER_GH_LANGUAGES` | 你启用了 GitHub 时 | 例如 `python typescript` 或 `all` |
+| `IDEER_GH_SINCE` | 你启用了 GitHub 时 | `daily` / `weekly` / `monthly` |
+| `IDEER_GH_MAX_REPOS` | 你启用了 GitHub 时 | GitHub 候选仓库上限 |
+| `IDEER_HF_CONTENT_TYPES` | 你启用了 HuggingFace 时 | 例如 `papers`、`papers models` |
+| `IDEER_HF_MAX_PAPERS` | 你启用了 HuggingFace 时 | 论文数量上限 |
+| `IDEER_HF_MAX_MODELS` | 你启用了 HuggingFace 时 | 模型数量上限 |
+| `IDEER_SS_QUERIES` | 你启用了 Semantic Scholar 且想手动指定查询时 | 多个 query 用 `|` 分隔 |
+| `IDEER_SS_MAX_RESULTS` | 你启用了 Semantic Scholar 时 | 抓取结果上限 |
+| `IDEER_SS_MAX_PAPERS` | 你启用了 Semantic Scholar 时 | 最终推荐论文上限 |
+| `IDEER_SS_YEAR` | 你启用了 Semantic Scholar 时 | 年份过滤 |
+| `IDEER_SS_FIELDS_OF_STUDY` | 你启用了 Semantic Scholar 时 | 多个 field 用 `|` 分隔 |
+| `IDEER_SS_API_KEY` | 你有 Semantic Scholar API key 时 | 可提高稳定性/额度 |
+| `IDEER_X_RAPIDAPI_KEY` | 你启用了 X / Twitter 时 | X 数据源必须 |
+| `IDEER_X_RAPIDAPI_HOST` | 你启用了 X / Twitter 时 | 默认 `twitter-api45.p.rapidapi.com` |
+| `IDEER_X_ACCOUNTS` | 你启用了 X / Twitter 且想固定账号池时 | 多行或空格分隔都建议整理成文本 |
+| `IDEER_X_DISCOVER_ACCOUNTS` | 你启用了 X / Twitter 且想自动发现账号时 | `1` 开启 |
+| `IDEER_X_MERGE_STATIC_ACCOUNTS` | X 自动发现时 | 是否和静态账号池合并 |
+| `IDEER_X_USE_PERSISTED_ACCOUNTS` | X 自动发现时 | 是否复用历史发现结果 |
+| `IDEER_X_SKIP_DISCOVERY_IF_PERSISTED` | X 自动发现时 | 有持久化结果时跳过重新发现 |
+| `IDEER_X_DISCOVERY_PERSIST_FILE` | X 自动发现时 | 默认 `state/x_accounts.discovered.txt` |
+
+#### 怎么选数据源
+
+- 通过 `IDEER_DAILY_SOURCES` 这个 Secret 选择
+- 写成空格分隔，例如：
+  - `github arxiv`
+  - `github huggingface semanticscholar`
+  - `arxiv semanticscholar huggingface twitter`
+- 如果启用了某个源，但没填它必需的 API 配置，运行时会失败
+
+#### 怎么用
+
+1. Fork 仓库
+2. 在 fork 仓库的 `Settings -> Secrets and variables -> Actions` 填好上面的 Secrets
+3. 打开 `Actions -> Scheduled Report Email`
+4. 点击 `Run workflow` 手动跑一次确认配置正确
+5. 如果需要改定时，编辑 `.github/workflows/scheduled-report-email.yml` 里的 cron
+
+#### 适合谁
+
+- 只想定时收到报告邮件，不想自己配服务器
+- 接受 GitHub Hosted Runner 的运行时长和并发限制
+- 主要需求是“抓取 + 生成跨源报告 + 发邮件”，不是长期在线 Web 服务
+
 ### CLI 命令一览
 
 ```
@@ -490,4 +583,3 @@ iDeer 的灵感和实现受益于以下优秀的开源项目：
 MIT License · Made by [@LiYu0524](https://github.com/LiYu0524)
 
 </div>
-

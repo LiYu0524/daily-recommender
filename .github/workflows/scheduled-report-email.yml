@@ -1,0 +1,134 @@
+name: Scheduled Report Email
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      sources:
+        description: "Space-separated sources, e.g. 'github arxiv semanticscholar huggingface'"
+        required: false
+        default: "github arxiv semanticscholar huggingface"
+      report_title:
+        description: "Optional report title override"
+        required: false
+        default: ""
+      receiver:
+        description: "Optional receiver email override"
+        required: false
+        default: ""
+      send_email:
+        description: "Send the final report email"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scheduled-report-email
+  cancel-in-progress: false
+
+jobs:
+  generate-report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      IDEER_PROVIDER: ${{ secrets.IDEER_PROVIDER }}
+      IDEER_MODEL_NAME: ${{ secrets.IDEER_MODEL_NAME }}
+      IDEER_BASE_URL: ${{ secrets.IDEER_BASE_URL }}
+      IDEER_API_KEY: ${{ secrets.IDEER_API_KEY }}
+      IDEER_TEMPERATURE: ${{ secrets.IDEER_TEMPERATURE }}
+      IDEER_SMTP_SERVER: ${{ secrets.IDEER_SMTP_SERVER }}
+      IDEER_SMTP_PORT: ${{ secrets.IDEER_SMTP_PORT }}
+      IDEER_SMTP_SENDER: ${{ secrets.IDEER_SMTP_SENDER }}
+      IDEER_SMTP_RECEIVER: ${{ secrets.IDEER_SMTP_RECEIVER }}
+      IDEER_SMTP_PASSWORD: ${{ secrets.IDEER_SMTP_PASSWORD }}
+      IDEER_DESCRIPTION_TEXT: ${{ secrets.IDEER_DESCRIPTION_TEXT }}
+      IDEER_RESEARCHER_PROFILE_TEXT: ${{ secrets.IDEER_RESEARCHER_PROFILE_TEXT }}
+      IDEER_DAILY_SOURCES: ${{ secrets.IDEER_DAILY_SOURCES }}
+      IDEER_REPORT_TITLE: ${{ secrets.IDEER_REPORT_TITLE }}
+      IDEER_REPORT_MIN_SCORE: ${{ secrets.IDEER_REPORT_MIN_SCORE }}
+      IDEER_REPORT_MAX_ITEMS: ${{ secrets.IDEER_REPORT_MAX_ITEMS }}
+      IDEER_REPORT_THEME_COUNT: ${{ secrets.IDEER_REPORT_THEME_COUNT }}
+      IDEER_REPORT_PREDICTION_COUNT: ${{ secrets.IDEER_REPORT_PREDICTION_COUNT }}
+      IDEER_REPORT_IDEA_COUNT: ${{ secrets.IDEER_REPORT_IDEA_COUNT }}
+      IDEER_NUM_WORKERS: ${{ secrets.IDEER_NUM_WORKERS }}
+      IDEER_ARXIV_CATEGORIES: ${{ secrets.IDEER_ARXIV_CATEGORIES }}
+      IDEER_ARXIV_MAX_ENTRIES: ${{ secrets.IDEER_ARXIV_MAX_ENTRIES }}
+      IDEER_ARXIV_MAX_PAPERS: ${{ secrets.IDEER_ARXIV_MAX_PAPERS }}
+      IDEER_GH_LANGUAGES: ${{ secrets.IDEER_GH_LANGUAGES }}
+      IDEER_GH_SINCE: ${{ secrets.IDEER_GH_SINCE }}
+      IDEER_GH_MAX_REPOS: ${{ secrets.IDEER_GH_MAX_REPOS }}
+      IDEER_HF_CONTENT_TYPES: ${{ secrets.IDEER_HF_CONTENT_TYPES }}
+      IDEER_HF_MAX_PAPERS: ${{ secrets.IDEER_HF_MAX_PAPERS }}
+      IDEER_HF_MAX_MODELS: ${{ secrets.IDEER_HF_MAX_MODELS }}
+      IDEER_SS_QUERIES: ${{ secrets.IDEER_SS_QUERIES }}
+      IDEER_SS_MAX_RESULTS: ${{ secrets.IDEER_SS_MAX_RESULTS }}
+      IDEER_SS_MAX_PAPERS: ${{ secrets.IDEER_SS_MAX_PAPERS }}
+      IDEER_SS_YEAR: ${{ secrets.IDEER_SS_YEAR }}
+      IDEER_SS_FIELDS_OF_STUDY: ${{ secrets.IDEER_SS_FIELDS_OF_STUDY }}
+      IDEER_SS_API_KEY: ${{ secrets.IDEER_SS_API_KEY }}
+      IDEER_X_RAPIDAPI_KEY: ${{ secrets.IDEER_X_RAPIDAPI_KEY }}
+      IDEER_X_RAPIDAPI_HOST: ${{ secrets.IDEER_X_RAPIDAPI_HOST }}
+      IDEER_X_ACCOUNTS: ${{ secrets.IDEER_X_ACCOUNTS }}
+      IDEER_X_DISCOVER_ACCOUNTS: ${{ secrets.IDEER_X_DISCOVER_ACCOUNTS }}
+      IDEER_X_MERGE_STATIC_ACCOUNTS: ${{ secrets.IDEER_X_MERGE_STATIC_ACCOUNTS }}
+      IDEER_X_USE_PERSISTED_ACCOUNTS: ${{ secrets.IDEER_X_USE_PERSISTED_ACCOUNTS }}
+      IDEER_X_SKIP_DISCOVERY_IF_PERSISTED: ${{ secrets.IDEER_X_SKIP_DISCOVERY_IF_PERSISTED }}
+      IDEER_X_DISCOVERY_PERSIST_FILE: ${{ secrets.IDEER_X_DISCOVERY_PERSIST_FILE }}
+      INPUT_SOURCES: ${{ github.event.inputs.sources }}
+      INPUT_REPORT_TITLE: ${{ github.event.inputs.report_title }}
+      INPUT_RECEIVER: ${{ github.event.inputs.receiver }}
+      INPUT_SEND_EMAIL: ${{ github.event.inputs.send_email }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-web.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-web.txt
+
+      - name: Prepare runtime config from GitHub secrets
+        run: python scripts/setup_github_action_report.py
+
+      - name: Run daily report pipeline
+        run: |
+          bash scripts/run_daily.sh 2>&1 | tee report-run.log
+
+      - name: Verify report output exists
+        run: |
+          REPORT_HTML="$(find history/reports -type f -name 'report.html' 2>/dev/null | sort | tail -n 1 || true)"
+          if [ -z "$REPORT_HTML" ]; then
+            echo "::error::No report.html was generated."
+            exit 1
+          fi
+          echo "Latest report: $REPORT_HTML"
+
+      - name: Upload report artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ideer-report-${{ github.run_number }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            report-run.log
+            history/reports/**
+            history/arxiv/**
+            history/semanticscholar/**
+            history/huggingface/**
+            history/github/**
+            history/twitter/**
+            history/pubmed/**

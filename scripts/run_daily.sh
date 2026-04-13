@@ -20,6 +20,7 @@ IDEA_ARGS=()
 REPORT_ARGS=()
 SS_QUERY_ARGS=()
 SS_FIELD_ARGS=()
+SOURCE_EMAIL_ARGS=()
 
 if [ -n "${SS_QUERIES:-}" ]; then
   IFS='|' read -r -a SS_QUERY_VALUES <<< "${SS_QUERIES}"
@@ -61,6 +62,10 @@ if [ "${GENERATE_REPORT:-0}" = "1" ]; then
   fi
 fi
 
+if [ "${SKIP_SOURCE_EMAILS:-0}" = "1" ]; then
+  SOURCE_EMAIL_ARGS+=(--skip_source_emails)
+fi
+
 "$PYTHON_BIN" main.py \
   --sources "${SOURCES[@]}" \
   --description "${DESCRIPTION_FILE:-profiles/description.txt}" \
@@ -82,5 +87,6 @@ fi
   --hf_content_type "${HF_CONTENT_TYPES[@]}" \
   --hf_max_papers "${HF_MAX_PAPERS:-30}" \
   --hf_max_models "${HF_MAX_MODELS:-15}" \
+  "${SOURCE_EMAIL_ARGS[@]}" \
   "${REPORT_ARGS[@]}" \
   "${IDEA_ARGS[@]}"
