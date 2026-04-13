@@ -1,0 +1,5 @@
+version: 1
+interface:
+  display_name: iDeer Daily Paper Chatbot
+  short_description: Chatbot-first iDeer paper digest without repo LLM API keys
+  default_prompt: Run the iDeer daily paper workflow in chatbot-first mode, fetch raw source items, summarize them directly in chat, save artifacts under history, and only send email if SMTP is fully configured and explicitly requested.
