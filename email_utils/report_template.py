@@ -109,6 +109,7 @@ def render_report_email(report: dict) -> str:
     theme_blocks = []
     for theme in report.get("themes") or []:
         signals_html = "".join(_render_signal(signal) for signal in (theme.get("signals") or []))
+        narrative_html = _escape(theme.get("narrative", "")).replace("\n", "<br><br>")
         theme_blocks.append(
             f"""
             <div style="padding:22px 24px;border-radius:18px;background:#ffffff;border:1px solid #e2e8f0;
@@ -117,7 +118,7 @@ def render_report_email(report: dict) -> str:
                 {_escape(theme.get("title", "Untitled"))}
               </div>
               <div style="margin-top:14px;font-size:15px;line-height:1.85;color:#334155;">
-                {_escape(theme.get("narrative", "")).replace("\n", "<br><br>")}
+                {narrative_html}
               </div>
               <div style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">
                 <div style="font-size:12px;font-weight:700;letter-spacing:0.08em;color:#64748b;text-transform:uppercase;">
@@ -132,16 +133,18 @@ def render_report_email(report: dict) -> str:
         )
 
     interpretation = report.get("interpretation") or {}
+    thesis_html = _escape(interpretation.get("thesis", "")).replace("\n", "<br><br>")
+    implications_html = _escape(interpretation.get("implications", "")).replace("\n", "<br><br>")
     interpretation_html = f"""
     <div style="padding:24px 26px;border-radius:18px;background:#f8fafc;border:1px solid #e2e8f0;margin-top:8px;">
       <div style="font-size:13px;font-weight:700;letter-spacing:0.08em;color:#0f766e;text-transform:uppercase;">
         我的判断
       </div>
       <div style="margin-top:14px;font-size:15px;line-height:1.85;color:#1f2937;">
-        {_escape(interpretation.get("thesis", "")).replace("\n", "<br><br>")}
+        {thesis_html}
       </div>
       <div style="margin-top:16px;font-size:15px;line-height:1.85;color:#334155;">
-        {_escape(interpretation.get("implications", "")).replace("\n", "<br><br>")}
+        {implications_html}
       </div>
     </div>
     """
