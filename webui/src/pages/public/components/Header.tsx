@@ -27,19 +27,14 @@ export function Header({ mode, onModeChange, meta, isDesktopEmbed }: HeaderProps
 
   return (
     <header className="sticky top-0 z-40 border-b border-white/60 bg-white/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 md:px-8">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 md:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ink text-sm font-extrabold tracking-[0.2em] text-white shadow-soft">
-            DR
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-ink text-sm font-extrabold tracking-[0.15em] text-white shadow-soft">
+            iD
           </div>
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-400">
-              WEB EDITION
-            </p>
-            <h1 className="text-base font-bold tracking-[-0.02em] text-ink md:text-lg">
-              Daily Recommender
-            </h1>
-          </div>
+          <h1 className="text-lg font-bold tracking-[-0.02em] text-ink">
+            iDeer
+          </h1>
         </div>
 
         <div className="flex items-center gap-2">
