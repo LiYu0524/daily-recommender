@@ -208,6 +208,11 @@ export async function applySwipeFeedback(): Promise<{ status: string; positive: 
   return readJson(res);
 }
 
+export async function syncSwipeToZotero(collection = "iDeer Liked"): Promise<{ status: string; synced: number; failed: number; skipped: number }> {
+  const res = await fetch(buildHttpUrl(`/api/swipe/sync-zotero?collection=${encodeURIComponent(collection)}`), { method: "POST" });
+  return readJson(res);
+}
+
 function normalizeProbeError(error: unknown) {
   if (error instanceof Error) {
     return error;

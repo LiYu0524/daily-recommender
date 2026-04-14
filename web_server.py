@@ -1214,6 +1214,67 @@ def apply_swipe_feedback():
     return {"status": "ok", "positive": positive, "negative": negative}
 
 
+ZOTERO_SAVE_SCRIPT = Path.home() / ".claude" / "skills" / "zotero-mcp" / "scripts" / "zotero_save.py"
+ZOTERO_PYTHON = Path.home() / ".local" / "share" / "uv" / "tools" / "zotero-mcp-server" / "bin" / "python"
+
+
+@app.post("/api/swipe/sync-zotero")
+def sync_liked_to_zotero(collection: str = "iDeer Liked"):
+    """Sync all liked (un-synced) papers to Zotero."""
+    fb = _load_swipe_feedback()
+    swiped = fb.get("swiped", {})
+
+    # Find python for zotero_save.py
+    python_bin = str(ZOTERO_PYTHON) if ZOTERO_PYTHON.exists() else sys.executable
+    script = str(ZOTERO_SAVE_SCRIPT)
+    if not ZOTERO_SAVE_SCRIPT.exists():
+        return {"status": "error", "message": f"zotero_save.py not found at {script}"}
+
+    synced = 0
+    failed = 0
+    skipped = 0
+
+    for url, entry in swiped.items():
+        if entry.get("action") != "like":
+            continue
+        if entry.get("synced_to_zotero"):
+            skipped += 1
+            continue
+
+        cmd = [python_bin, script, "--url", url, "--collection", collection, "--tags", "iDeer-liked"]
+        try:
+            import subprocess
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                entry["synced_to_zotero"] = True
+                synced += 1
+                print(f"[zotero] Synced: {entry.get('title', url)}")
+            else:
+                # URL might not be parseable — try manual metadata
+                title = entry.get("title", "")
+                source = entry.get("source", "")
+                if title and source:
+                    cmd2 = [python_bin, script, "--title", title, "--url", url,
+                            "--collection", collection, "--tags", f"iDeer-liked,{source}"]
+                    r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=30)
+                    if r2.returncode == 0:
+                        entry["synced_to_zotero"] = True
+                        synced += 1
+                        print(f"[zotero] Synced (manual): {title}")
+                    else:
+                        failed += 1
+                        print(f"[zotero] Failed: {title} — {r2.stderr[:200]}")
+                else:
+                    failed += 1
+                    print(f"[zotero] Failed: {url} — {result.stderr[:200]}")
+        except Exception as e:
+            failed += 1
+            print(f"[zotero] Error: {url} — {e}")
+
+    _save_swipe_feedback(fb)
+    return {"status": "ok", "synced": synced, "failed": failed, "skipped": skipped}
+
+
 # ============== Main ==============
 
 if __name__ == "__main__":

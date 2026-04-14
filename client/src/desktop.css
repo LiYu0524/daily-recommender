@@ -2088,6 +2088,8 @@ details summary {
   cursor: pointer;
 }
 .swipe-apply-inline:hover { background: var(--line, #e5e7eb); }
+.swipe-apply-inline.zotero { color: #cc2936; border-color: #cc293640; }
+.swipe-apply-inline.zotero:hover { background: #cc293612; }
 
 .swipe-empty-card {
   text-align: center;
