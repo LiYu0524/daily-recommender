@@ -122,6 +122,16 @@ Prefer these output shapes:
 
 It is acceptable for chatbot-first runs to write fewer files than the original pipeline, as long as you report exactly what was written.
 
+If the user wants HTML artifacts without touching the main repo scripts, use the bundled renderer:
+
+```bash
+python skills/ideer-daily-paper-chatbot/scripts/render_chatbot_artifacts.py \
+  --date YYYY-MM-DD \
+  --base-dir <artifact-dir>
+```
+
+This script should render `report.html` and `digest_email.html` from chatbot-written markdown/json outputs inside the chosen artifact directory.
+
 ### Step 5: Email behavior
 
 If SMTP is incomplete, do not claim that email was sent. Save the digest locally and tell the user what is missing.

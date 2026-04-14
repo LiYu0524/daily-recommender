@@ -21,6 +21,7 @@ node_modules/
 # History/cache data
 history/
 state/
+chatbot_test_outputs/
 
 # Logs
 *.log
