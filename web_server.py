@@ -887,6 +887,29 @@ def desktop_client_asset(asset_path: str):
     return JSONResponse({"error": "Desktop client build not found"}, status_code=404)
 
 
+@app.get("/tinder")
+def tinder_web_ui():
+    if CLIENT_DIST_INDEX_FILE.exists():
+        return FileResponse(CLIENT_DIST_INDEX_FILE)
+    return FileResponse(DESKTOP_UI_FILE)
+
+
+@app.get("/tinder/{asset_path:path}")
+def tinder_client_asset(asset_path: str):
+    if CLIENT_DIST_INDEX_FILE.exists():
+        resolved = _resolve_client_dist_path(asset_path)
+        if resolved and resolved.is_file():
+            media_type, _ = mimetypes.guess_type(str(resolved))
+            return FileResponse(resolved, media_type=media_type)
+
+        if asset_path and "." not in Path(asset_path).name:
+            return FileResponse(CLIENT_DIST_INDEX_FILE)
+
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    return JSONResponse({"error": "Desktop client build not found"}, status_code=404)
+
+
 @app.get("/web-ui.html")
 def legacy_admin_web_ui():
     return FileResponse(ADMIN_UI_FILE)

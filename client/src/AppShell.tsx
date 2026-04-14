@@ -177,6 +177,7 @@ function parseInterestSummary(value: string) {
 export default function AppShell() {
   const desktopWindow = isTauriDesktop();
   const forcedTab = readTabFromLocation();
+  const forcedView = readViewFromLocation();
   const panelWindowMode = desktopWindow && forcedTab !== null;
   const showCustomTitleBar = !desktopWindow;
   const socketRef = useRef<WebSocket | null>(null);
@@ -185,7 +186,7 @@ export default function AppShell() {
   const language = resolveLanguage(languagePreference);
   const theme = resolveTheme(themePreference);
   const copy = COPY[language];
-  const [activeView, setActiveView] = useState<ViewName>("home");
+  const [activeView, setActiveView] = useState<ViewName>(forcedView ?? "home");
   const [controlPanel, setControlPanel] = useState<ControlPanel>("none");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("profile");
   const [userProfile, setUserProfile] = useState<UserProfile>(() => normalizeUserProfile(readJsonPreference("ideer.user", DEFAULT_PROFILE)));
@@ -884,4 +885,25 @@ function readTabFromLocation(): SettingsTab | null {
     return tab;
   }
   return "profile";
+}
+
+function readViewFromLocation(): ViewName | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("view");
+  if (view === "home" || view === "library" || view === "swipe") {
+    return view;
+  }
+
+  const path = window.location.pathname.replace(/\/+$/, "");
+  if (path.endsWith("/tinder")) {
+    return "swipe";
+  }
+  if (path.endsWith("/desktop")) {
+    return "home";
+  }
+  return null;
 }
