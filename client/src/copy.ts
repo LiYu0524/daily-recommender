@@ -224,7 +224,7 @@ export const COPY = {
       website: "个人网站",
       githubId: "GitHub ID",
       github: "打开 GitHub 仓库",
-      star: "帮我点个star吧 求求你了",
+      star: "Ciallo～(∠・ω< )⌒⭐️ 给我star",
       version: "桌面原型",
       stack: "Tauri + React + Python",
       close: "关闭",
