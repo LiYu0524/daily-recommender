@@ -233,7 +233,7 @@ button,
 .floating-star-button {
   position: absolute;
   right: 18px;
-  bottom: 18px;
+  top: 16px;
   z-index: 12;
   display: inline-flex;
   align-items: center;
@@ -402,6 +402,14 @@ button,
 .nav-stack,
 .sidebar-footer,
 .workspace,
+.home-slogan {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--primary, #111);
+  margin: 0 0 4px 0;
+  letter-spacing: -0.3px;
+}
+
 .page-grid,
 .content-grid,
 .side-stack,
@@ -637,7 +645,7 @@ button,
 .home-grid,
 .library-grid,
 .settings-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 280px minmax(0, 1fr);
 }
 
 .home-grid {
@@ -1949,7 +1957,7 @@ details summary {
 
   .floating-star-button {
     right: 14px;
-    bottom: 14px;
+    top: 14px;
     padding: 0 14px;
   }
 }

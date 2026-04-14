@@ -28,6 +28,7 @@ export const COPY = {
     appTitle: "iDeer",
     desktopTitle: "iDeer Desktop",
     brandSubtitle: "每日智能简报",
+    homeSlogan: "每日研究简报，一键送达邮箱",
     previewBadge: "预览",
     statusConnecting: "等待连接服务",
     statusConnected: "服务已连接",
@@ -101,7 +102,7 @@ export const COPY = {
       comingSoon: "即将支持",
       comingSoonToast: "更多信息源正在准备中",
       noSourcesActive: "尚未开启信息源。",
-      recentRuns: "最近结果",
+      recentRuns: "历史记录",
       noHistory: "还没有历史记录，先运行一轮看看。",
     },
     workbench: {
@@ -258,6 +259,7 @@ export const COPY = {
   en: {
     appTitle: "iDeer",
     desktopTitle: "iDeer Desktop",
+    homeSlogan: "Daily research briefing, delivered to your inbox",
     brandSubtitle: "Daily intelligence briefings",
     previewBadge: "Preview",
     statusConnecting: "Waiting for service connection",
@@ -332,7 +334,7 @@ export const COPY = {
       comingSoon: "Coming soon",
       comingSoonToast: "More sources are on the way",
       noSourcesActive: "No source enabled yet.",
-      recentRuns: "Recent runs",
+      recentRuns: "History",
       noHistory: "No history yet. Run something to get started.",
     },
     workbench: {

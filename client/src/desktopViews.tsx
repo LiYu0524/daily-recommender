@@ -135,7 +135,7 @@ export function TitleBar(props: { backendHealthy: boolean; statusText: string; p
         <span className="titlebar-status">{props.statusText}</span>
       </div>
       <div className="titlebar-right">
-        {!desktop ? <span className="titlebar-badge">{props.previewBadge}</span> : null}
+        {/* preview badge removed */}
         {desktop && (
           <div className="window-controls">
             <button className="window-control minimize" aria-label={props.copy.windowControls.minimize} onClick={() => void minimizeWindow()}>
@@ -388,6 +388,7 @@ export function HomeView(props: {
   onToggleSource: (source: SourceName) => void; onChangeRunForm: <K extends keyof RunRequest>(key: K, value: RunRequest[K]) => void; onSaveInterestDescription: (value: string) => Promise<void>; savingInterestDescription: boolean;
 }) {
   const [showComingSoonToast, setShowComingSoonToast] = useState(false);
+  const [interestSaved, setInterestSaved] = useState(false);
   const sourceWiseSelected = props.runForm.delivery_mode === "source_emails";
   const combinedSelected = props.runForm.delivery_mode === "combined_report";
   const [positiveInput, setPositiveInput] = useState("");
@@ -474,6 +475,7 @@ export function HomeView(props: {
 
   return (
     <section className="page-grid">
+      <h2 className="home-slogan">{props.copy.homeSlogan}</h2>
       {props.errorText && <div className="notice error">{props.errorText}</div>}
       {props.runDisabledReason ? <div className="notice info">{props.runDisabledReason}</div> : null}
       {showComingSoonToast ? <div className="coming-soon-toast">{props.copy.home.comingSoonToast}</div> : null}
@@ -700,8 +702,8 @@ export function HomeView(props: {
               </div>
 
               <div className="interest-save-row">
-                <button type="button" className="secondary-action" onClick={() => void props.onSaveInterestDescription(serializeInterestDescription(interestTags))} disabled={props.savingInterestDescription}>
-                  {props.savingInterestDescription ? props.copy.workbench.savingInterest : props.copy.workbench.saveInterest}
+                <button type="button" className="secondary-action" onClick={async () => { await props.onSaveInterestDescription(serializeInterestDescription(interestTags)); setInterestSaved(true); setTimeout(() => setInterestSaved(false), 2500); }} disabled={props.savingInterestDescription}>
+                  {interestSaved ? "✓ 已保存" : props.savingInterestDescription ? props.copy.workbench.savingInterest : props.copy.workbench.saveInterest}
                 </button>
               </div>
             </div>
