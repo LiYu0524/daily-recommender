@@ -36,6 +36,11 @@ function sourceBadgeLabel(source: string) {
   return map[source] || source;
 }
 
+function firstSentence(text: string): string {
+  const m = text.match(/^.+?[.!?](?:\s|$)/s);
+  return m ? m[0].trim() : text;
+}
+
 export function SwipeView(props: {
   backendHealthy: boolean;
   copy: AppCopy;
@@ -54,6 +59,8 @@ export function SwipeView(props: {
   const [applied, setApplied] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState("");
+  const [teaserUrl, setTeaserUrl] = useState<string | null>(null);
+  const [teaserLoading, setTeaserLoading] = useState(false);
   const dragging = useRef(false);
   const animating = useRef(false);
   const startX = useRef(0);
@@ -80,7 +87,7 @@ export function SwipeView(props: {
     setSelectedSources((prev) => {
       const next = new Set(prev);
       if (next.has(source)) {
-        if (next.size > 1) next.delete(source); // keep at least one
+        if (next.size > 1) next.delete(source);
       } else {
         next.add(source);
       }
@@ -91,19 +98,33 @@ export function SwipeView(props: {
 
   const current = index < queue.length ? queue[index] : null;
 
+  // 每次切换论文时拉取首图
+  useEffect(() => {
+    if (!current) { setTeaserUrl(null); setTeaserLoading(false); return; }
+    setTeaserUrl(null);
+    setTeaserLoading(true);
+    fetch(`/api/paper-teaser?url=${encodeURIComponent(current.url)}`)
+      .then(r => r.json())
+      .then((d: { image_url: string | null }) => {
+        if (d.image_url) {
+          setTeaserUrl(`/api/proxy-image?url=${encodeURIComponent(d.image_url)}`);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setTeaserLoading(false));
+  }, [current?.url]);
+
   const handleSwipe = useCallback(async (action: "like" | "dislike", fromGesture = false) => {
     if (!current || animating.current) return;
     animating.current = true;
     const dir = action === "like" ? "right" : "left";
     setLastSwiped({ item: current, idx: index });
 
-    // Fire-and-forget feedback
     sendSwipeFeedback(current.url, action, current._source_type, current.title)
       .then((res) => setStats(res.stats))
       .catch(() => {});
 
     if (fromGesture) {
-      // Gesture already has dragX set — go straight to exit
       setExiting(dir);
       setTimeout(() => {
         animating.current = false;
@@ -112,11 +133,8 @@ export function SwipeView(props: {
         setIndex((i) => i + 1);
       }, 300);
     } else {
-      // Button/keyboard: two-phase animation
-      // Phase 1: simulate drag (card slides + color overlay)
       setDragX(dir === "right" ? 150 : -150);
       setTimeout(() => {
-        // Phase 2: fly out
         setExiting(dir);
         setDragX(0);
         setTimeout(() => {
@@ -132,10 +150,8 @@ export function SwipeView(props: {
     if (!lastSwiped) return;
     setIndex(lastSwiped.idx);
     setLastSwiped(null);
-    // re-insert not needed since queue is immutable; just move index back
   }, [lastSwiped]);
 
-  // Pointer events for swipe gesture
   const onPointerDown = (e: React.PointerEvent) => {
     dragging.current = true;
     startX.current = e.clientX;
@@ -157,7 +173,6 @@ export function SwipeView(props: {
     }
   };
 
-  // Keyboard
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") void handleSwipe("like");
@@ -193,7 +208,6 @@ export function SwipeView(props: {
     setSyncing(false);
   };
 
-  // Card transform
   const isDraggingByPointer = dragging.current;
   const cardStyle = exiting
     ? { transform: `translateX(${exiting === "right" ? 600 : -600}px) rotate(${exiting === "right" ? 15 : -15}deg)`, transition: "transform 0.3s ease-out, opacity 0.3s", opacity: 0 }
@@ -203,6 +217,7 @@ export function SwipeView(props: {
 
   const overlayOpacity = Math.min(Math.abs(dragX) / 150, 0.4);
   const overlayColor = dragX > 0 ? `rgba(34,197,94,${overlayOpacity})` : dragX < 0 ? `rgba(239,68,68,${overlayOpacity})` : "transparent";
+  const sourceColor = SOURCE_COLORS[current?._source_type ?? ""] || "#666";
 
   if (loading) {
     return <div className="swipe-container"><p className="swipe-empty">{copy.swipe?.loading ?? "Loading..."}</p></div>;
@@ -232,7 +247,7 @@ export function SwipeView(props: {
     );
   }
 
-  const scoreColor = current.score >= 7 ? "#16a34a" : current.score >= 5 ? "#d97706" : "#9ca3af";
+  const oneSentence = firstSentence(current.summary ?? "");
 
   return (
     <div className="swipe-container">
@@ -251,40 +266,50 @@ export function SwipeView(props: {
         ))}
       </div>
 
-      <div className="swipe-card" ref={cardRef} style={cardStyle}
+      <div className="swipe-card swipe-card-fullpage" ref={cardRef} style={cardStyle}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       >
         {/* Overlay tint */}
         <div className="swipe-card-overlay" style={{ background: overlayColor }} />
 
-        {/* Header */}
-        <div className="swipe-card-header">
-          <span className="swipe-source-badge" style={{ background: SOURCE_COLORS[current._source_type] || "#666" }}>
+        {/* 顶部图片区 */}
+        <div className="swipe-teaser-area" style={{ background: teaserLoading ? "#f3f4f6" : (teaserUrl ? "#fff" : sourceColor + "cc") }}>
+          {teaserLoading
+            ? <div className="swipe-teaser-spinner" />
+            : teaserUrl
+              ? <img src={teaserUrl} className="swipe-teaser-img" alt="teaser" />
+              : <div className="swipe-teaser-authors">
+                  {current._source_type === "github" ? (
+                    <>
+                      <a className="swipe-teaser-github-link" href={current.url} onClick={e => { e.stopPropagation(); props.onOpenUrl(current.url); }}>
+                        {current.url.replace("https://github.com/", "")}
+                      </a>
+                      <div className="swipe-teaser-meta-row">
+                        {current.language && <span className="swipe-teaser-chip">{current.language}</span>}
+                        {current.stars != null && <span className="swipe-teaser-chip">★ {current.stars.toLocaleString()}</span>}
+                        {current.forks != null && <span className="swipe-teaser-chip">⑂ {current.forks.toLocaleString()}</span>}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {current.authors && <span className="swipe-teaser-authors-text">{current.authors}</span>}
+                      {current.venue && <span className="swipe-teaser-venue">{current.venue}</span>}
+                    </>
+                  )}
+                </div>}
+          <span className="swipe-source-badge swipe-source-badge-overlay" style={{ background: sourceColor }}>
             {sourceBadgeLabel(current._source_type)}
           </span>
-          <span className="swipe-date">{current._date}</span>
-          <span className="swipe-score" style={{ borderColor: scoreColor, color: scoreColor }}>{current.score.toFixed(1)}</span>
         </div>
 
-        {/* Title */}
-        <h2 className="swipe-card-title">{current.title}</h2>
-
-        {/* Summary — scrollable, stops pointer events from triggering swipe */}
-        <div className="swipe-card-summary" onPointerDown={(e) => e.stopPropagation()}>{current.summary}</div>
-
-        {/* Metadata chips */}
-        <div className="swipe-meta-row">
-          {current.stars != null && <span className="swipe-chip">&#9733; {current.stars.toLocaleString()}</span>}
-          {current.upvotes != null && <span className="swipe-chip">&#128077; {current.upvotes}</span>}
-          {current.downloads != null && <span className="swipe-chip">&#128229; {current.downloads.toLocaleString()}</span>}
-          {current.citation_count != null && <span className="swipe-chip">&#128218; {current.citation_count}</span>}
-          {current.language && <span className="swipe-chip">{current.language}</span>}
+        {/* 下半内容区 */}
+        <div className="swipe-card-body" onPointerDown={(e) => e.stopPropagation()}>
+          <h2 className="swipe-card-title">{current.title}</h2>
+          <p className="swipe-card-onesent">{oneSentence}</p>
+          <button className="swipe-open-link" onClick={(e) => { e.stopPropagation(); props.onOpenUrl(current.url); }}>
+            {copy.swipe?.openLink ?? "Open"} <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
+          </button>
         </div>
-
-        {/* Open link */}
-        <button className="swipe-open-link" onClick={(e) => { e.stopPropagation(); props.onOpenUrl(current.url); }}>
-          {copy.swipe?.openLink ?? "Open"} <FontAwesomeIcon icon={faArrowUpRightFromSquare} />
-        </button>
       </div>
 
       {/* Action buttons */}
@@ -300,11 +325,6 @@ export function SwipeView(props: {
         <button className="swipe-btn like" onClick={() => void handleSwipe("like")} title="Like (→)">
           <FontAwesomeIcon icon={faHeart} />
         </button>
-      </div>
-
-      {/* Progress */}
-      <div className="swipe-progress">
-        <span>{index} / {queue.length} {copy.swipe?.progress ?? "reviewed"}</span>
         {stats.total > 0 && (
           <>
             <button className="swipe-apply-inline" onClick={() => void handleApply()} disabled={applying}>

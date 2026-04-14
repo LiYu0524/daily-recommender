@@ -315,6 +315,282 @@ details summary {
   font-weight: 600;
 }
 
+/* ===== Swipe Full-Page Card ===== */
+
+.swipe-container {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: #f3f4f6;
+}
+
+.swipe-card-fullpage {
+  width: 100%;
+  max-width: 480px;
+  height: 88vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+  position: relative;
+  cursor: grab;
+  user-select: none;
+}
+
+.swipe-card-fullpage:active {
+  cursor: grabbing;
+}
+
+.swipe-card-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+  border-radius: 20px;
+  transition: background 0.1s;
+}
+
+/* 图片区：占上半 50% */
+.swipe-teaser-area {
+  flex: 0 0 50%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.swipe-teaser-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+  padding: 12px;
+}
+
+.swipe-teaser-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: #9ca3af;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.swipe-teaser-authors {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+.swipe-teaser-authors-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+  line-height: 1.8;
+  letter-spacing: 0.3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.swipe-teaser-venue {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+  font-style: italic;
+}
+
+.swipe-teaser-github-link {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffffff;
+  text-align: center;
+  word-break: break-all;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.swipe-teaser-meta-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.swipe-teaser-chip {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 13px;
+}
+
+.swipe-teaser-placeholder {
+  width: 100%;
+  height: 100%;
+  opacity: 0.25;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255,255,255,0.1) 0px,
+    rgba(255,255,255,0.1) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+}
+
+.swipe-source-badge-overlay {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 5;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+/* 内容区：占下半 50% */
+.swipe-card-body {
+  flex: 1;
+  padding: 24px 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.swipe-card-title {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.45;
+  color: #111827;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.swipe-card-onesent {
+  font-size: 14px;
+  color: #4b5563;
+  line-height: 1.65;
+  margin: 0;
+  flex: 1;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+.swipe-open-link {
+  align-self: flex-start;
+  background: #111827;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.swipe-open-link:hover {
+  background: #374151;
+}
+
+/* Action buttons row */
+.swipe-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.swipe-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2px solid;
+  background: #fff;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+
+.swipe-btn:hover { transform: scale(1.1); }
+.swipe-btn.like { border-color: #16a34a; color: #16a34a; }
+.swipe-btn.dislike { border-color: #ef4444; color: #ef4444; }
+.swipe-btn.undo { border-color: #9ca3af; color: #9ca3af; }
+
+.swipe-apply-inline {
+  border: 1px solid #9ca3af;
+  background: #fff;
+  color: #374151;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Empty / loading states */
+.swipe-empty { color: #6b7280; font-size: 15px; }
+
+.swipe-empty-card {
+  background: #fff;
+  border-radius: 20px;
+  padding: 40px 32px;
+  max-width: 360px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+}
+
+.swipe-empty-title { font-size: 18px; font-weight: 700; margin: 0; }
+.swipe-empty-sub { font-size: 14px; color: #6b7280; margin: 0; }
+
+.swipe-apply-btn {
+  border: 1px solid #111827;
+  background: #111827;
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.swipe-apply-btn.secondary {
+  background: #fff;
+  color: #111827;
+}
+
 @media (max-width: 1100px) {
   .page-shell {
     grid-template-columns: 1fr;

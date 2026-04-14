@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
 
+import httpx
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -1273,6 +1274,74 @@ def sync_liked_to_zotero(collection: str = "iDeer Liked"):
 
     _save_swipe_feedback(fb)
     return {"status": "ok", "synced": synced, "failed": failed, "skipped": skipped}
+
+
+# ============== Paper Teaser ==============
+
+@app.get("/api/paper-teaser")
+async def paper_teaser(url: str):
+    """抓取论文首图，支持 arXiv 和 Semantic Scholar URL。"""
+    from bs4 import BeautifulSoup
+
+    arxiv_id: str | None = None
+
+    # 直接是 arXiv 链接
+    m = re.search(r'arxiv\.org/(?:abs|pdf|html)/(\d{4}\.\d+)', url)
+    if m:
+        arxiv_id = m.group(1)
+
+    # Semantic Scholar 链接 → 用 S2 API 查 arXiv ID
+    if not arxiv_id:
+        m2 = re.search(r'semanticscholar\.org/paper/([a-f0-9]{40})', url)
+        if m2:
+            paper_id = m2.group(1)
+            try:
+                async with httpx.AsyncClient(timeout=6, follow_redirects=True) as client:
+                    s2_resp = await client.get(
+                        f"https://api.semanticscholar.org/graph/v1/paper/{paper_id}",
+                        params={"fields": "externalIds"},
+                        headers={"User-Agent": "Mozilla/5.0"},
+                    )
+                if s2_resp.status_code == 200:
+                    arxiv_id = s2_resp.json().get("externalIds", {}).get("ArXiv")
+            except Exception:
+                pass
+
+    if not arxiv_id:
+        return {"image_url": None}
+
+    # 抓 arXiv HTML 首图
+    html_url = f"https://arxiv.org/html/{arxiv_id}"
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            resp = await client.get(html_url, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            return {"image_url": None}
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for fig in soup.find_all("figure"):
+            img = fig.find("img")
+            if img and img.get("src"):
+                src = img["src"]
+                if src.startswith("http"):
+                    return {"image_url": src}
+                else:
+                    return {"image_url": f"https://arxiv.org/html/{src}"}
+    except Exception:
+        pass
+    return {"image_url": None}
+
+
+@app.get("/api/proxy-image")
+async def proxy_image(url: str):
+    """代理外部图片，解决浏览器 CORS 限制。"""
+    from fastapi.responses import Response
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        content_type = resp.headers.get("content-type", "image/png")
+        return Response(content=resp.content, media_type=content_type)
+    except Exception:
+        return Response(status_code=502)
 
 
 # ============== Main ==============
