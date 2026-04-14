@@ -4,13 +4,11 @@
 
 ### Primary Areas
 1. **Agent** — LLM-based agents, tool use, multi-step reasoning, agentic workflows, autonomous systems, embodied agents
-2. **Spatial Intelligence** — embodied AI, vision-language-action models, 3D scene understanding, navigation, robotics, egocentric video, spatial reasoning
-3. **World Model** — predictive models of environments, latent dynamics, planning, simulation, video generation for control, model-based agents
+2. **Safety** — AI safety, alignment, jailbreak, red-teaming, guardrails, RLHF, harmful content detection
+3. **Trustworthy** — trustworthy AI, robustness, fairness, interpretability, hallucination, uncertainty
 
 ### Sub-directions
 - Embodied AI & VLA (Vision-Language-Action)
-- Spatial intelligence and 3D/egocentric perception
-- World models for planning, simulation, and embodied control
 - Benchmark design & evaluation methodology
 - Domain-specific RAG systems
 - Egocentric video understanding
