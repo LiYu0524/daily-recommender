@@ -12,7 +12,7 @@
 
 [English](./README.en.md) · [技术文档](./docs/TECHNICAL.md) · [桌面 Demo](./docs/DESKTOP_DEMO.md)
 
-<img src="./docs/ideer.svg" alt="iDeer Icon" width="360" />
+<img src="./docs/ideer.svg" alt="iDeer Icon" width="360" /> 
 
 **每天花 30 分钟分别刷 GitHub、arXiv、HuggingFace、Twitter？**
 **iDeer 把这件事压缩到打开邮箱的 5 分钟。**
