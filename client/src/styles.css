@@ -364,6 +364,14 @@ details summary {
   justify-content: center;
 }
 
+/* 无图片时缩小区域，不占半屏 */
+.swipe-teaser-area.compact {
+  flex: 0 0 auto;
+  min-height: 72px;
+  max-height: 110px;
+  padding: 16px 20px;
+}
+
 .swipe-teaser-img {
   width: 100%;
   height: 100%;

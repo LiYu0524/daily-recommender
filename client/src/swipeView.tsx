@@ -273,7 +273,7 @@ export function SwipeView(props: {
         <div className="swipe-card-overlay" style={{ background: overlayColor }} />
 
         {/* 顶部图片区 */}
-        <div className="swipe-teaser-area" style={{ background: teaserLoading ? "#f3f4f6" : (teaserUrl ? "#fff" : sourceColor + "cc") }}>
+        <div className={teaserUrl ? "swipe-teaser-area" : "swipe-teaser-area compact"} style={{ background: teaserLoading ? "#f3f4f6" : (teaserUrl ? "#fff" : sourceColor + "18") }}>
           {teaserLoading
             ? <div className="swipe-teaser-spinner" />
             : teaserUrl
