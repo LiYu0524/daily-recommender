@@ -70,7 +70,7 @@ import iconX from "./assets/icon_x.svg";
 import iconXBlack from "./assets/icon_x.black.svg";
 import "./desktop.css";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBars, faFire, faFolderOpen, faHouse, faStar } from "@fortawesome/free-solid-svg-icons";
+import { faBars, faFire, faFolderOpen, faHouse, faStar, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { SwipeView } from "./swipeView";
 
 type ViewName = "home" | "library" | "swipe";
@@ -187,6 +187,7 @@ export default function AppShell() {
   const theme = resolveTheme(themePreference);
   const copy = COPY[language];
   const [activeView, setActiveView] = useState<ViewName>(forcedView ?? "home");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [controlPanel, setControlPanel] = useState<ControlPanel>("none");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("profile");
   const [userProfile, setUserProfile] = useState<UserProfile>(() => normalizeUserProfile(readJsonPreference("ideer.user", DEFAULT_PROFILE)));
@@ -697,17 +698,28 @@ export default function AppShell() {
   return (
     <div className={showCustomTitleBar ? "desktop-root" : "desktop-root native-frame"}>
       {showCustomTitleBar ? <TitleBar backendHealthy={backendHealthy} statusText={statusText} previewBadge={copy.previewBadge} title={copy.desktopTitle} copy={copy} /> : null}
-      <div className="desktop-shell">
-        <aside className="app-sidebar">
-          <div className="brand-block text-only"><div><h1>{copy.appTitle}</h1><p className="brand-subtitle">{copy.desktopTitle}</p></div></div>
+      <div className="desktop-shell no-sidebar-grid">
+        {/* Floating sidebar toggle */}
+        <button className="sidebar-toggle-btn" onClick={() => setSidebarOpen(true)} aria-label="Menu">
+          <FontAwesomeIcon icon={faBars} />
+        </button>
+
+        {/* Sidebar overlay */}
+        {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+
+        <aside className={sidebarOpen ? "app-sidebar floating open" : "app-sidebar floating"}>
+          <div className="sidebar-top-row">
+            <div className="brand-block text-only"><div><h1>{copy.appTitle}</h1><p className="brand-subtitle">{copy.desktopTitle}</p></div></div>
+            <button className="sidebar-close-btn" onClick={() => setSidebarOpen(false)}><FontAwesomeIcon icon={faXmark} /></button>
+          </div>
           <nav className="nav-stack">
-            <SidebarButton icon={faHouse} label={copy.sidebar.home} active={activeView === "home"} onClick={() => setActiveView("home")} />
-            <SidebarButton icon={faFire} label={copy.sidebar.swipe} active={activeView === "swipe"} onClick={() => setActiveView("swipe")} />
-            <SidebarButton icon={faFolderOpen} label={copy.sidebar.library} active={activeView === "library"} onClick={() => setActiveView("library")} />
+            <SidebarButton icon={faHouse} label={copy.sidebar.home} active={activeView === "home"} onClick={() => { setActiveView("home"); setSidebarOpen(false); }} />
+            <SidebarButton icon={faFire} label={copy.sidebar.swipe} active={activeView === "swipe"} onClick={() => { setActiveView("swipe"); setSidebarOpen(false); }} />
+            <SidebarButton icon={faFolderOpen} label={copy.sidebar.library} active={activeView === "library"} onClick={() => { setActiveView("library"); setSidebarOpen(false); }} />
           </nav>
           <div className="sidebar-footer">
             <div className="user-dock">
-              <button type="button" className="user-card" onClick={() => openControlPanel("profile")}>
+              <button type="button" className="user-card" onClick={() => { openControlPanel("profile"); setSidebarOpen(false); }}>
                 <img src={avatarMap[userProfile.avatar]} alt={sidebarName} className="user-avatar" />
                 <span className="user-meta">
                   <strong>{sidebarName}</strong>

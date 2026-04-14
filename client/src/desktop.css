@@ -218,6 +218,10 @@ button,
   border: 0;
   border-top: 0;
   border-radius: 0;
+}
+
+.desktop-shell.no-sidebar-grid {
+  grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -267,9 +271,95 @@ button,
   backdrop-filter: blur(16px);
 }
 
+.app-sidebar.floating {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 272px;
+  z-index: 1000;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  box-shadow: none;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(20px);
+}
+
+.app-sidebar.floating.open {
+  transform: translateX(0);
+  box-shadow: 8px 0 32px rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.sidebar-toggle-btn {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 100;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line, #e5e7eb);
+  background: var(--panel, #fff);
+  color: var(--primary, #111);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: background 0.15s;
+}
+.sidebar-toggle-btn:hover {
+  background: var(--line, #f3f4f6);
+}
+
+.sidebar-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sidebar-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--muted, #6b7280);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.sidebar-close-btn:hover {
+  background: var(--line, #e5e7eb);
+}
+
 :root[data-theme="dark"] .app-sidebar {
   background: #080a0e;
   backdrop-filter: none;
+}
+
+:root[data-theme="dark"] .app-sidebar.floating {
+  background: rgba(8, 10, 14, 0.96);
+}
+
+:root[data-theme="dark"] .sidebar-toggle-btn {
+  background: #1a1d24;
+  border-color: #2a2d35;
+  color: #e5e7eb;
+}
+
+:root[data-theme="dark"] .sidebar-overlay {
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .brand-block {
@@ -1810,7 +1900,7 @@ details summary {
 
 @media (max-width: 980px) {
   .desktop-shell {
-    grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .app-sidebar {
@@ -1866,7 +1956,7 @@ details summary {
 
 @media (max-width: 720px) {
   .desktop-shell {
-    grid-template-columns: 76px minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .workspace {
