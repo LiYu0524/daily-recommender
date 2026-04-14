@@ -343,7 +343,11 @@ def main():
         ideas = generator.generate()
         if ideas:
             generator.save(ideas)
-            generator.send_email(ideas, email_config)
+            generator.render_email(ideas)
+            if args.skip_source_emails:
+                print("[IdeaGenerator] Skip idea email because --skip_source_emails is enabled.")
+            else:
+                generator.send_email(ideas, email_config)
         else:
             print("No ideas generated.")
 
