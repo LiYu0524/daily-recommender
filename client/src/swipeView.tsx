@@ -215,8 +215,8 @@ export function SwipeView(props: {
       ? { transform: `translateX(${dragX}px) rotate(${dragX * 0.04}deg)`, transition: isDraggingByPointer ? "none" : "transform 0.2s ease" }
       : { transform: "translateX(0) rotate(0)", transition: "transform 0.2s ease" };
 
-  const overlayOpacity = Math.min(Math.abs(dragX) / 150, 0.4);
-  const overlayColor = dragX > 0 ? `rgba(34,197,94,${overlayOpacity})` : dragX < 0 ? `rgba(239,68,68,${overlayOpacity})` : "transparent";
+  const stampOpacity = exiting ? 1 : Math.min(Math.abs(dragX) / 120, 1);
+  const stampDirection = exiting === "right" ? "accept" : exiting === "left" ? "reject" : dragX > 30 ? "accept" : dragX < -30 ? "reject" : null;
   const sourceColor = SOURCE_COLORS[current?._source_type ?? ""] || "#666";
 
   if (loading) {
@@ -269,8 +269,16 @@ export function SwipeView(props: {
       <div className="swipe-card swipe-card-fullpage" ref={cardRef} style={cardStyle}
         onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp}
       >
-        {/* Overlay tint */}
-        <div className="swipe-card-overlay" style={{ background: overlayColor }} />
+        {/* Swipe stamp overlay */}
+        {stampDirection && (
+          <div className={`swipe-stamp ${stampDirection}`} style={{ opacity: stampOpacity }}>
+            <span className="swipe-stamp-label">{stampDirection === "accept" ? "ACCEPT" : "REJECT"}</span>
+          </div>
+        )}
+        {/* Border glow */}
+        {stampDirection && (
+          <div className={`swipe-card-border-glow ${stampDirection}`} style={{ opacity: stampOpacity }} />
+        )}
 
         {/* 顶部图片区 */}
         <div className={teaserUrl ? "swipe-teaser-area" : "swipe-teaser-area compact"} style={{ background: teaserLoading ? "#f3f4f6" : (teaserUrl ? "#fff" : sourceColor + "18") }}>
