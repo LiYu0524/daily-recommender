@@ -12,6 +12,7 @@ import {
   getStoredUser,
   loginWithEmail,
   clearStoredUser,
+  saveUserDescription,
 } from "./api";
 import {
   ControlCenter,
@@ -194,6 +195,8 @@ export default function AppShell() {
   const [loggedInUser, setLoggedInUser] = useState<{ userId: string; email: string } | null>(() => desktopWindow ? { userId: "", email: "local" } : getStoredUser());
   const [loginEmail, setLoginEmail] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [needsSetup, setNeedsSetup] = useState(false);
+  const [setupDescription, setSetupDescription] = useState("");
   const [controlPanel, setControlPanel] = useState<ControlPanel>("none");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("profile");
   const [userProfile, setUserProfile] = useState<UserProfile>(() => normalizeUserProfile(readJsonPreference("ideer.user", DEFAULT_PROFILE)));
@@ -708,6 +711,7 @@ export default function AppShell() {
       try {
         const result = await loginWithEmail(loginEmail);
         setLoggedInUser({ userId: result.user_id, email: result.email });
+        if (result.needs_setup) setNeedsSetup(true);
       } catch (e) {
         setLoginError(e instanceof Error ? e.message : "Login failed");
       }
@@ -730,6 +734,42 @@ export default function AppShell() {
             {language === "zh" ? "开始使用" : "Get started"}
           </button>
           {loginError && <p className="login-error">{loginError}</p>}
+        </div>
+      </div>
+    );
+  }
+
+  // --- Interest setup (first login) ---
+  if (needsSetup) {
+    const handleSetup = async () => {
+      if (!setupDescription.trim()) return;
+      try {
+        await saveUserDescription(setupDescription.trim());
+        setNeedsSetup(false);
+      } catch { /* ignore */ }
+    };
+    return (
+      <div className="login-gate">
+        <div className="login-card" style={{ maxWidth: 480 }}>
+          <h1>🦌 {language === "zh" ? "设置你的研究兴趣" : "Set your research interests"}</h1>
+          <p style={{ fontSize: 14, lineHeight: 1.6, textAlign: "left", color: "#6b7280" }}>
+            {language === "zh"
+              ? "告诉 iDeer 你关注什么方向，推荐会更精准。例如：\n\n1. Agent Safety — LLM agent 安全\n2. NLP — 自然语言处理\n3. Trustworthy AI — 可信 AI"
+              : "Tell iDeer what you research. For example:\n\n1. Agent Safety\n2. NLP\n3. Trustworthy AI"}
+          </p>
+          <textarea
+            className="login-email-input"
+            style={{ minHeight: 120, resize: "vertical", fontFamily: "inherit" }}
+            placeholder={language === "zh" ? "描述你的研究方向..." : "Describe your research interests..."}
+            value={setupDescription}
+            onChange={(e) => setSetupDescription(e.target.value)}
+          />
+          <button className="login-btn" onClick={() => void handleSetup()} disabled={!setupDescription.trim()}>
+            {language === "zh" ? "保存并开始" : "Save & start"}
+          </button>
+          <button className="login-btn" style={{ background: "transparent", color: "#6b7280", marginTop: 8 }} onClick={() => setNeedsSetup(false)}>
+            {language === "zh" ? "跳过，稍后设置" : "Skip for now"}
+          </button>
         </div>
       </div>
     );

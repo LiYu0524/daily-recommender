@@ -4,7 +4,7 @@
 
 > 「这倒是提醒我了」
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple.svg)](https://claude.ai/code)
 [![Codex Skill](https://img.shields.io/badge/Codex-Skill-0A7A5E.svg)](./skills/ideer-daily-paper/SKILL.md)
@@ -589,12 +589,24 @@ iDeer 的灵感和实现受益于以下优秀的开源项目：
 
 ---
 
+## 商业授权
+
+本仓库默认采用 [GNU Affero General Public License v3.0](./LICENSE) 开源。
+
+如果你的使用方式无法满足 AGPL-3.0 的开源义务，或者你需要闭源部署、内部二次分发、商业合作等单独授权，请联系：
+
+- `liyu@pjlab.org.cn`
+
+详细说明见 [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md)。
+
+---
+
 <div align="center">
 
 **如果这只鹿帮你省了时间，给它一颗 ⭐**
 
 [![Star History Chart](https://api.star-history.com/svg?repos=LiYu0524/iDeer&type=Date)](https://star-history.com/#LiYu0524/iDeer&Date)
 
-MIT License · Made by [@LiYu0524](https://github.com/LiYu0524)
+AGPL-3.0 · Commercial licensing available · Made by [@LiYu0524](https://github.com/LiYu0524)
 
 </div>

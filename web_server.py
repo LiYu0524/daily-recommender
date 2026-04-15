@@ -150,12 +150,10 @@ def auth_login(payload: dict):
     meta_path = user_dir / "meta.json"
     if not meta_path.exists():
         meta_path.write_text(json.dumps({"email": email, "created": datetime.now().isoformat()}, ensure_ascii=False), encoding="utf-8")
-        # Copy global description as starting point
-        if DESCRIPTION_FILE.exists():
-            (user_dir / "description.txt").write_text(DESCRIPTION_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+        # New user starts with empty description — setup flow will prompt
 
-    first_login = not (user_dir / "description.txt").exists()
-    return {"user_id": user_id, "email": email, "needs_setup": first_login}
+    needs_setup = not (user_dir / "description.txt").exists()
+    return {"user_id": user_id, "email": email, "needs_setup": needs_setup}
 
 
 @app.get("/api/user/description")
@@ -1219,7 +1217,7 @@ class SwipeFeedbackRequest(BaseModel):
 @app.get("/api/swipe/queue")
 def get_swipe_queue(request: Request, sources: str = "", days: int = 7, limit: int = 50):
     uid = _resolve_user_id(request)
-    source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else ["arxiv", "huggingface", "github", "semanticscholar"]
+    source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else ["arxiv", "huggingface", "github", "semanticscholar", "pubmed", "twitter"]
     fb = _load_swipe_feedback(uid)
     swiped_urls = set(fb.get("swiped", {}).keys())
     items, total_unseen = _collect_unseen_items(source_list, days, swiped_urls, limit)

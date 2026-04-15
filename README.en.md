@@ -4,7 +4,7 @@
 
 > "That reminds me."
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](./LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple.svg)](https://claude.ai/code)
 [![Codex Skill](https://img.shields.io/badge/Codex-Skill-0A7A5E.svg)](./skills/ideer-daily-paper/SKILL.md)
@@ -217,12 +217,24 @@ Thanks to these projects for their contributions to academic information automat
 
 ---
 
+## Commercial Licensing
+
+This repository is open sourced under the [GNU Affero General Public License v3.0](./LICENSE).
+
+If your intended use is incompatible with AGPL-3.0 obligations, or you need a separate license for closed-source deployment, internal redistribution, or other commercial arrangements, contact:
+
+- `liyu@pjlab.org.cn`
+
+See [COMMERCIAL_LICENSE.md](./COMMERCIAL_LICENSE.md) for the short notice.
+
+---
+
 <div align="center">
 
 **If this deer saves you time, give it a star**
 
 [![Star History Chart](https://api.star-history.com/svg?repos=LiYu0524/iDeer&type=Date)](https://star-history.com/#LiYu0524/iDeer&Date)
 
-MIT License · Made by [@LiYu0524](https://github.com/LiYu0524)
+AGPL-3.0 · Commercial licensing available · Made by [@LiYu0524](https://github.com/LiYu0524)
 
 </div>

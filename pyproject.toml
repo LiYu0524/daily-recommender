@@ -7,7 +7,7 @@ name = "ideer"
 version = "0.1.0"
 description = "🦌 iDeer — Turn daily research noise into a clean, personalized briefing"
 readme = "README.md"
-license = {text = "MIT"}
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 authors = [
     {name = "LiYu0524", email = "liyu@pjlab.org.cn"},
@@ -16,7 +16,7 @@ keywords = ["arxiv", "paper", "recommender", "daily-digest", "research", "llm"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
