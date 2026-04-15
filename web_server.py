@@ -1278,9 +1278,25 @@ def sync_liked_to_zotero(collection: str = "iDeer Liked"):
 
 # ============== Paper Teaser ==============
 
+_teaser_cache: dict[str, dict] = {}
+_TEASER_CACHE_MAX = 200
+
+
 @app.get("/api/paper-teaser")
 async def paper_teaser(url: str):
     """Fetch teaser image for a paper/repo. Supports arXiv, S2, HF, GitHub, PubMed."""
+    if url in _teaser_cache:
+        return _teaser_cache[url]
+    result = await _resolve_teaser(url)
+    # LRU eviction
+    if len(_teaser_cache) >= _TEASER_CACHE_MAX:
+        oldest = next(iter(_teaser_cache))
+        del _teaser_cache[oldest]
+    _teaser_cache[url] = result
+    return result
+
+
+async def _resolve_teaser(url: str) -> dict:
     from bs4 import BeautifulSoup
     from urllib.parse import urljoin
 
@@ -1365,23 +1381,39 @@ async def paper_teaser(url: str):
     return {"image_url": None}
 
 
+_image_cache: dict[str, tuple[bytes, str]] = {}
+_IMAGE_CACHE_MAX = 50  # ~50 images * ~200KB avg = ~10MB
+
+
 @app.get("/api/proxy-image")
 async def proxy_image(url: str):
-    """代理外部图片，解决浏览器 CORS 限制。"""
+    """Proxy external images with in-memory cache. Avoids re-downloading."""
     from fastapi.responses import Response, RedirectResponse
     if not url or not url.startswith("http"):
         return Response(status_code=400)
+
+    if url in _image_cache:
+        content, content_type = _image_cache[url]
+        return Response(content=content, media_type=content_type,
+                        headers={"Cache-Control": "public, max-age=86400"})
+
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
         if resp.status_code != 200:
-            # Fallback: redirect browser directly to the image URL
             return RedirectResponse(url=url)
         content_type = resp.headers.get("content-type", "image/png")
-        return Response(content=resp.content, media_type=content_type)
+        content = resp.content
+        # Cache if not too large (< 500KB)
+        if len(content) < 512_000:
+            if len(_image_cache) >= _IMAGE_CACHE_MAX:
+                oldest = next(iter(_image_cache))
+                del _image_cache[oldest]
+            _image_cache[url] = (content, content_type)
+        return Response(content=content, media_type=content_type,
+                        headers={"Cache-Control": "public, max-age=86400"})
     except Exception as e:
         print(f"[proxy-image] Failed for {url[:80]}: {e}")
-        # Fallback: let browser try directly
         return RedirectResponse(url=url)
 
 

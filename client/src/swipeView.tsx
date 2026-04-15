@@ -61,6 +61,7 @@ export function SwipeView(props: {
   const [syncResult, setSyncResult] = useState("");
   const [teaserUrl, setTeaserUrl] = useState<string | null>(null);
   const [teaserLoading, setTeaserLoading] = useState(false);
+  const teaserCache = useRef<Map<string, string | null>>(new Map());
   const dragging = useRef(false);
   const animating = useRef(false);
   const startX = useRef(0);
@@ -98,21 +99,60 @@ export function SwipeView(props: {
 
   const current = index < queue.length ? queue[index] : null;
 
-  // 每次切换论文时拉取首图
-  useEffect(() => {
-    if (!current) { setTeaserUrl(null); setTeaserLoading(false); return; }
-    setTeaserUrl(null);
-    setTeaserLoading(true);
-    fetch(buildUrl(`/api/paper-teaser?url=${encodeURIComponent(current.url)}`))
+  // Prefetch teaser images for upcoming cards
+  const prefetchTeaser = useCallback((item: SwipeItem) => {
+    const cache = teaserCache.current;
+    if (cache.has(item.url)) return;
+    cache.set(item.url, null); // mark as in-flight
+    fetch(buildUrl(`/api/paper-teaser?url=${encodeURIComponent(item.url)}`))
       .then(r => r.json())
       .then((d: { image_url: string | null }) => {
         if (d.image_url) {
-          setTeaserUrl(buildUrl(`/api/proxy-image?url=${encodeURIComponent(d.image_url)}`));
+          const proxyUrl = buildUrl(`/api/proxy-image?url=${encodeURIComponent(d.image_url)}`);
+          cache.set(item.url, proxyUrl);
+          // Preload the actual image bytes into browser cache
+          const img = new Image();
+          img.src = proxyUrl;
+        } else {
+          cache.set(item.url, null);
         }
       })
-      .catch(() => {})
-      .finally(() => setTeaserLoading(false));
-  }, [current?.url]);
+      .catch(() => cache.set(item.url, null));
+  }, []);
+
+  // On index change: set current teaser + prefetch next 3
+  useEffect(() => {
+    if (!current) { setTeaserUrl(null); setTeaserLoading(false); return; }
+
+    const cached = teaserCache.current.get(current.url);
+    if (cached !== undefined) {
+      // Already fetched (or fetched as null)
+      setTeaserUrl(cached);
+      setTeaserLoading(false);
+    } else {
+      // Not prefetched yet — fetch now
+      setTeaserUrl(null);
+      setTeaserLoading(true);
+      fetch(buildUrl(`/api/paper-teaser?url=${encodeURIComponent(current.url)}`))
+        .then(r => r.json())
+        .then((d: { image_url: string | null }) => {
+          if (d.image_url) {
+            const proxyUrl = buildUrl(`/api/proxy-image?url=${encodeURIComponent(d.image_url)}`);
+            teaserCache.current.set(current.url, proxyUrl);
+            setTeaserUrl(proxyUrl);
+          } else {
+            teaserCache.current.set(current.url, null);
+          }
+        })
+        .catch(() => teaserCache.current.set(current.url, null))
+        .finally(() => setTeaserLoading(false));
+    }
+
+    // Prefetch next 3 cards
+    for (let i = index + 1; i <= Math.min(index + 3, queue.length - 1); i++) {
+      prefetchTeaser(queue[i]);
+    }
+  }, [index, current?.url, queue, prefetchTeaser]);
 
   const handleSwipe = useCallback(async (action: "like" | "dislike", fromGesture = false) => {
     if (!current || animating.current) return;
