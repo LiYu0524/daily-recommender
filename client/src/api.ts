@@ -20,6 +20,59 @@ function buildHttpUrl(path: string) {
   return `${apiBase}${path}`;
 }
 
+// --- User session ---
+const USER_STORAGE_KEY = "ideer_user";
+
+export function getStoredUser(): { userId: string; email: string } | null {
+  try {
+    const raw = localStorage.getItem(USER_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export function setStoredUser(userId: string, email: string) {
+  localStorage.setItem(USER_STORAGE_KEY, JSON.stringify({ userId, email }));
+}
+
+export function clearStoredUser() {
+  localStorage.removeItem(USER_STORAGE_KEY);
+}
+
+function userHeaders(): Record<string, string> {
+  const user = getStoredUser();
+  return user?.userId ? { "X-User-Id": user.userId } : {};
+}
+
+function fetchWithUser(url: string, init?: RequestInit): Promise<Response> {
+  const headers = { ...userHeaders(), ...(init?.headers || {}) };
+  return fetch(url, { ...init, headers });
+}
+
+export async function loginWithEmail(email: string): Promise<{ user_id: string; email: string; needs_setup: boolean }> {
+  const res = await fetch(buildHttpUrl("/api/auth/login"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  const data = await readJson<{ user_id: string; email: string; needs_setup: boolean }>(res);
+  setStoredUser(data.user_id, data.email);
+  return data;
+}
+
+export async function getUserDescription(): Promise<string> {
+  const res = await fetchWithUser(buildHttpUrl("/api/user/description"));
+  const data = await readJson<{ description: string }>(res);
+  return data.description;
+}
+
+export async function saveUserDescription(description: string): Promise<void> {
+  await fetchWithUser(buildHttpUrl("/api/user/description"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description }),
+  });
+}
+
 function buildWsUrl(path: string) {
   if (apiBase) {
     return `${apiBase.replace(/^http/, "ws")}${path}`;
@@ -189,12 +242,12 @@ export async function getSwipeQueue(sources: string[] = [], days: number = 7, li
   if (sources.length) params.set("sources", sources.join(","));
   params.set("days", String(days));
   params.set("limit", String(limit));
-  const res = await fetch(buildHttpUrl(`/api/swipe/queue?${params}`));
+  const res = await fetchWithUser(buildHttpUrl(`/api/swipe/queue?${params}`));
   return readJson(res);
 }
 
 export async function sendSwipeFeedback(url: string, action: "like" | "dislike" | "skip", source = "", title = ""): Promise<{ status: string; stats: SwipeStats }> {
-  const res = await fetch(buildHttpUrl("/api/swipe/feedback"), {
+  const res = await fetchWithUser(buildHttpUrl("/api/swipe/feedback"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url, action, source, title }),
@@ -203,17 +256,17 @@ export async function sendSwipeFeedback(url: string, action: "like" | "dislike" 
 }
 
 export async function getSwipeStats(): Promise<SwipeStats> {
-  const res = await fetch(buildHttpUrl("/api/swipe/stats"));
+  const res = await fetchWithUser(buildHttpUrl("/api/swipe/stats"));
   return readJson(res);
 }
 
 export async function applySwipeFeedback(): Promise<{ status: string; positive: string[]; negative: string[] }> {
-  const res = await fetch(buildHttpUrl("/api/swipe/apply-feedback"), { method: "POST" });
+  const res = await fetchWithUser(buildHttpUrl("/api/swipe/apply-feedback"), { method: "POST" });
   return readJson(res);
 }
 
 export async function syncSwipeToZotero(collection = "iDeer Liked"): Promise<{ status: string; synced: number; failed: number; skipped: number }> {
-  const res = await fetch(buildHttpUrl(`/api/swipe/sync-zotero?collection=${encodeURIComponent(collection)}`), { method: "POST" });
+  const res = await fetchWithUser(buildHttpUrl(`/api/swipe/sync-zotero?collection=${encodeURIComponent(collection)}`), { method: "POST" });
   return readJson(res);
 }
 

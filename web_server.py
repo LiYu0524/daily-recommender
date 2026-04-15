@@ -19,7 +19,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
@@ -42,6 +42,7 @@ DESCRIPTION_FILE = PROJECT_ROOT / "profiles" / "description.txt"
 RESEARCHER_PROFILE_FILE = PROJECT_ROOT / "profiles" / "researcher_profile.md"
 TWITTER_ACCOUNTS_FILE = PROJECT_ROOT / "profiles" / "x_accounts.txt"
 SWIPE_FEEDBACK_FILE = PROJECT_ROOT / "profiles" / "swipe_feedback.json"
+USERS_DIR = PROJECT_ROOT / "users"
 GITHUB_REPO_URL = "https://github.com/LiYu0524/daily-recommender"
 
 DEFAULT_CONFIG = {
@@ -97,6 +98,102 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ============== User isolation ==============
+
+def _email_to_user_id(email: str) -> str:
+    """Stable short hash from email for directory naming."""
+    import hashlib
+    return hashlib.sha256(email.strip().lower().encode()).hexdigest()[:16]
+
+
+def _get_user_dir(user_id: str) -> Path | None:
+    """Return the user's data directory, or None for anonymous/desktop."""
+    if not user_id:
+        return None
+    d = USERS_DIR / user_id
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _user_description_path(user_id: str) -> Path:
+    d = _get_user_dir(user_id)
+    return (d / "description.txt") if d else DESCRIPTION_FILE
+
+
+def _user_swipe_path(user_id: str) -> Path:
+    d = _get_user_dir(user_id)
+    return (d / "swipe_feedback.json") if d else SWIPE_FEEDBACK_FILE
+
+
+def _user_config_path(user_id: str) -> Path:
+    d = _get_user_dir(user_id)
+    return (d / "config.json") if d else CONFIG_FILE
+
+
+def _resolve_user_id(request) -> str:
+    """Extract user_id from X-User-Id header. Empty = anonymous/desktop."""
+    return (request.headers.get("x-user-id") or "").strip()
+
+
+@app.post("/api/auth/login")
+def auth_login(payload: dict):
+    """Email-based login (no password). Creates user dir if first time."""
+    email = (payload.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return JSONResponse({"error": "Invalid email"}, status_code=400)
+
+    user_id = _email_to_user_id(email)
+    user_dir = _get_user_dir(user_id)
+
+    # Save email mapping
+    meta_path = user_dir / "meta.json"
+    if not meta_path.exists():
+        meta_path.write_text(json.dumps({"email": email, "created": datetime.now().isoformat()}, ensure_ascii=False), encoding="utf-8")
+        # Copy global description as starting point
+        if DESCRIPTION_FILE.exists():
+            (user_dir / "description.txt").write_text(DESCRIPTION_FILE.read_text(encoding="utf-8"), encoding="utf-8")
+
+    first_login = not (user_dir / "description.txt").exists()
+    return {"user_id": user_id, "email": email, "needs_setup": first_login}
+
+
+@app.get("/api/user/description")
+def get_user_description(request: Request):
+    uid = _resolve_user_id(request)
+    path = _user_description_path(uid)
+    content = path.read_text(encoding="utf-8") if path.exists() else ""
+    return {"description": content}
+
+
+@app.post("/api/user/description")
+def save_user_description(request: Request, payload: dict):
+    uid = _resolve_user_id(request)
+    desc = (payload.get("description") or "").strip()
+    if not desc:
+        return JSONResponse({"error": "Description cannot be empty"}, status_code=400)
+    path = _user_description_path(uid)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(desc + "\n", encoding="utf-8")
+    return {"status": "ok"}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    """Return current user info based on X-User-Id header."""
+    user_id = _resolve_user_id(request)
+    if not user_id:
+        return {"user_id": "", "email": "", "anonymous": True}
+
+    user_dir = _get_user_dir(user_id)
+    meta_path = user_dir / "meta.json"
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        return {"user_id": user_id, "email": meta.get("email", ""), "anonymous": False}
+    return {"user_id": user_id, "email": "", "anonymous": True}
+
+
+# ============== Utilities ==============
 
 def _read_text_if_exists(path: Path) -> str:
     if path.exists():
@@ -1059,18 +1156,20 @@ def get_schedule_status():
 # ============== Swipe (PaperTinder) ==============
 
 
-def _load_swipe_feedback() -> dict:
-    if SWIPE_FEEDBACK_FILE.exists():
+def _load_swipe_feedback(user_id: str = "") -> dict:
+    path = _user_swipe_path(user_id)
+    if path.exists():
         try:
-            return json.loads(SWIPE_FEEDBACK_FILE.read_text(encoding="utf-8"))
+            return json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             pass
     return {"swiped": {}, "stats": {"liked": 0, "disliked": 0, "total": 0}}
 
 
-def _save_swipe_feedback(data: dict) -> None:
-    SWIPE_FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
-    SWIPE_FEEDBACK_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+def _save_swipe_feedback(data: dict, user_id: str = "") -> None:
+    path = _user_swipe_path(user_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _collect_unseen_items(sources: list[str], days: int, swiped_urls: set[str], limit: int) -> tuple[list[dict], int]:
@@ -1118,17 +1217,19 @@ class SwipeFeedbackRequest(BaseModel):
 
 
 @app.get("/api/swipe/queue")
-def get_swipe_queue(sources: str = "", days: int = 7, limit: int = 50):
+def get_swipe_queue(request: Request, sources: str = "", days: int = 7, limit: int = 50):
+    uid = _resolve_user_id(request)
     source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else ["arxiv", "huggingface", "github", "semanticscholar"]
-    fb = _load_swipe_feedback()
+    fb = _load_swipe_feedback(uid)
     swiped_urls = set(fb.get("swiped", {}).keys())
     items, total_unseen = _collect_unseen_items(source_list, days, swiped_urls, limit)
     return {"items": items, "total_unseen": total_unseen, "total_swiped": fb["stats"].get("total", 0)}
 
 
 @app.post("/api/swipe/feedback")
-def record_swipe_feedback(req: SwipeFeedbackRequest):
-    fb = _load_swipe_feedback()
+def record_swipe_feedback(request: Request, req: SwipeFeedbackRequest):
+    uid = _resolve_user_id(request)
+    fb = _load_swipe_feedback(uid)
     swiped = fb.setdefault("swiped", {})
     stats = fb.setdefault("stats", {"liked": 0, "disliked": 0, "total": 0})
 
@@ -1155,19 +1256,21 @@ def record_swipe_feedback(req: SwipeFeedbackRequest):
         stats["disliked"] += 1
     stats["total"] += 1
 
-    _save_swipe_feedback(fb)
+    _save_swipe_feedback(fb, uid)
     return {"status": "ok", "stats": stats}
 
 
 @app.get("/api/swipe/stats")
-def get_swipe_stats():
-    fb = _load_swipe_feedback()
+def get_swipe_stats(request: Request):
+    uid = _resolve_user_id(request)
+    fb = _load_swipe_feedback(uid)
     return fb.get("stats", {"liked": 0, "disliked": 0, "total": 0})
 
 
 @app.post("/api/swipe/apply-feedback")
-def apply_swipe_feedback():
-    fb = _load_swipe_feedback()
+def apply_swipe_feedback(request: Request):
+    uid = _resolve_user_id(request)
+    fb = _load_swipe_feedback(uid)
     swiped = fb.get("swiped", {})
     if not swiped:
         return {"status": "ok", "message": "No swipe data yet."}
@@ -1190,8 +1293,8 @@ def apply_swipe_feedback():
     positive = _extract_keywords(liked_titles)
     negative = _extract_keywords(disliked_titles)
 
-    # Read and update description.txt
-    desc_path = DESCRIPTION_FILE
+    # Read and update user's description.txt
+    desc_path = _user_description_path(uid)
     content = desc_path.read_text(encoding="utf-8") if desc_path.exists() else ""
 
     marker_start = "--- Swipe-derived preferences (auto-updated) ---"
@@ -1220,9 +1323,10 @@ ZOTERO_PYTHON = Path.home() / ".local" / "share" / "uv" / "tools" / "zotero-mcp-
 
 
 @app.post("/api/swipe/sync-zotero")
-def sync_liked_to_zotero(collection: str = "iDeer Liked"):
+def sync_liked_to_zotero(request: Request, collection: str = "iDeer Liked"):
+    uid = _resolve_user_id(request)
     """Sync all liked (un-synced) papers to Zotero."""
-    fb = _load_swipe_feedback()
+    fb = _load_swipe_feedback(uid)
     swiped = fb.get("swiped", {})
 
     # Find python for zotero_save.py
@@ -1272,7 +1376,7 @@ def sync_liked_to_zotero(collection: str = "iDeer Liked"):
             failed += 1
             print(f"[zotero] Error: {url} — {e}")
 
-    _save_swipe_feedback(fb)
+    _save_swipe_feedback(fb, uid)
     return {"status": "ok", "synced": synced, "failed": failed, "skipped": skipped}
 
 

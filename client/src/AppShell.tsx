@@ -9,6 +9,9 @@ import {
   openRunSocket,
   saveConfig,
   testOpenAICompatibleApi,
+  getStoredUser,
+  loginWithEmail,
+  clearStoredUser,
 } from "./api";
 import {
   ControlCenter,
@@ -188,6 +191,9 @@ export default function AppShell() {
   const copy = COPY[language];
   const [activeView, setActiveView] = useState<ViewName>(forcedView ?? "home");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loggedInUser, setLoggedInUser] = useState<{ userId: string; email: string } | null>(() => desktopWindow ? { userId: "", email: "local" } : getStoredUser());
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginError, setLoginError] = useState("");
   const [controlPanel, setControlPanel] = useState<ControlPanel>("none");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("profile");
   const [userProfile, setUserProfile] = useState<UserProfile>(() => normalizeUserProfile(readJsonPreference("ideer.user", DEFAULT_PROFILE)));
@@ -636,7 +642,7 @@ export default function AppShell() {
     [copy],
   );
   const avatarMap = useMemo(() => Object.fromEntries(AVATARS.map((item) => [item.key, item.src])) as Record<AvatarId, string>, []);
-  const sidebarName = userProfile.name || copy.user.fallbackName;
+  const sidebarName = userProfile.name || loggedInUser?.email || copy.user.fallbackName;
   const interestSummary = useMemo(() => {
     const tags = parseInterestSummary(config.description || userProfile.focus);
     const preview = tags.positive.slice(0, 2).join(" · ") || userProfile.focus || copy.user.fallbackFocus;
@@ -691,6 +697,40 @@ export default function AppShell() {
           onChangeTheme={setThemePreference}
           onTestSmtpConnection={handleTestSmtpConnection}
         />
+      </div>
+    );
+  }
+
+  // --- Login gate (web only, desktop skips) ---
+  if (!loggedInUser && !desktopWindow) {
+    const handleLogin = async () => {
+      setLoginError("");
+      try {
+        const result = await loginWithEmail(loginEmail);
+        setLoggedInUser({ userId: result.user_id, email: result.email });
+      } catch (e) {
+        setLoginError(e instanceof Error ? e.message : "Login failed");
+      }
+    };
+    return (
+      <div className="login-gate">
+        <div className="login-card">
+          <h1>🦌 iDeer</h1>
+          <p>{copy.homeSlogan}</p>
+          <input
+            type="email"
+            className="login-email-input"
+            placeholder="your@email.com"
+            value={loginEmail}
+            onChange={(e) => setLoginEmail(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void handleLogin(); }}
+            autoFocus
+          />
+          <button className="login-btn" onClick={() => void handleLogin()} disabled={!loginEmail.includes("@")}>
+            {language === "zh" ? "开始使用" : "Get started"}
+          </button>
+          {loginError && <p className="login-error">{loginError}</p>}
+        </div>
       </div>
     );
   }
