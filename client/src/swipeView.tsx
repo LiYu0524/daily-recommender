@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faHeart, faXmark, faUndo, faArrowUpRightFromSquare, faCheck } from "@fortawesome/free-solid-svg-icons";
-import { getSwipeQueue, sendSwipeFeedback, applySwipeFeedback, syncSwipeToZotero } from "./api";
+import { getSwipeQueue, sendSwipeFeedback, applySwipeFeedback, syncSwipeToZotero, buildUrl } from "./api";
 import type { SwipeItem, SwipeStats } from "./types";
 import type { AppCopy } from "./copy";
 import iconArxiv from "./assets/icon_arxiv.svg";
@@ -103,11 +103,11 @@ export function SwipeView(props: {
     if (!current) { setTeaserUrl(null); setTeaserLoading(false); return; }
     setTeaserUrl(null);
     setTeaserLoading(true);
-    fetch(`/api/paper-teaser?url=${encodeURIComponent(current.url)}`)
+    fetch(buildUrl(`/api/paper-teaser?url=${encodeURIComponent(current.url)}`))
       .then(r => r.json())
       .then((d: { image_url: string | null }) => {
         if (d.image_url) {
-          setTeaserUrl(`/api/proxy-image?url=${encodeURIComponent(d.image_url)}`);
+          setTeaserUrl(buildUrl(`/api/proxy-image?url=${encodeURIComponent(d.image_url)}`));
         }
       })
       .catch(() => {})
@@ -311,7 +311,7 @@ export function SwipeView(props: {
         </div>
 
         {/* 下半内容区 */}
-        <div className="swipe-card-body" onPointerDown={(e) => e.stopPropagation()}>
+        <div className="swipe-card-body">
           <h2 className="swipe-card-title">{current.title}</h2>
           <p className="swipe-card-onesent">{oneSentence}</p>
           <button className="swipe-open-link" onClick={(e) => { e.stopPropagation(); props.onOpenUrl(current.url); }}>

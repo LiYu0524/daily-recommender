@@ -1338,20 +1338,28 @@ async def paper_teaser(url: str):
     if img:
         return {"image_url": img}
 
+    print(f"[paper-teaser] No image found for {url[:80]}")
     return {"image_url": None}
 
 
 @app.get("/api/proxy-image")
 async def proxy_image(url: str):
     """代理外部图片，解决浏览器 CORS 限制。"""
-    from fastapi.responses import Response
+    from fastapi.responses import Response, RedirectResponse
+    if not url or not url.startswith("http"):
+        return Response(status_code=400)
     try:
         async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
             resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        if resp.status_code != 200:
+            # Fallback: redirect browser directly to the image URL
+            return RedirectResponse(url=url)
         content_type = resp.headers.get("content-type", "image/png")
         return Response(content=resp.content, media_type=content_type)
-    except Exception:
-        return Response(status_code=502)
+    except Exception as e:
+        print(f"[proxy-image] Failed for {url[:80]}: {e}")
+        # Fallback: let browser try directly
+        return RedirectResponse(url=url)
 
 
 # ============== Main ==============

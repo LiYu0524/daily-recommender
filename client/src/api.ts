@@ -12,6 +12,10 @@ import type {
 
 const apiBase = import.meta.env.VITE_API_BASE?.replace(/\/$/, "") ?? "";
 
+export function buildUrl(path: string) {
+  return `${apiBase}${path}`;
+}
+
 function buildHttpUrl(path: string) {
   return `${apiBase}${path}`;
 }
