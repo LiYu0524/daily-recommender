@@ -47,7 +47,7 @@ export function SwipeView(props: {
   onOpenUrl: (url: string) => void;
 }) {
   const { copy } = props;
-  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set(ALL_SOURCES));
+  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set(["arxiv"]));
   const [queue, setQueue] = useState<SwipeItem[]>([]);
   const [index, setIndex] = useState(0);
   const [loading, setLoading] = useState(true);

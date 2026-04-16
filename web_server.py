@@ -1271,7 +1271,7 @@ class SwipeFeedbackRequest(BaseModel):
 @app.get("/api/swipe/queue")
 def get_swipe_queue(request: Request, sources: str = "", days: int = 7, limit: int = 50):
     uid = _resolve_user_id(request)
-    source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else ["arxiv", "huggingface", "github", "semanticscholar", "pubmed", "twitter"]
+    source_list = [s.strip() for s in sources.split(",") if s.strip()] if sources else ["arxiv"]
     fb = _load_swipe_feedback(uid)
     swiped_urls = set(fb.get("swiped", {}).keys())
     items, total_unseen = _collect_unseen_items(source_list, days, swiped_urls, limit)
