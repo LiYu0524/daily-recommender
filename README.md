@@ -8,6 +8,7 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Claude Code Skill](https://img.shields.io/badge/Claude%20Code-Skill-purple.svg)](https://claude.ai/code)
 [![Codex Skill](https://img.shields.io/badge/Codex-Skill-0A7A5E.svg)](./skills/ideer-daily-paper/SKILL.md)
+[![InternShannon Skill](https://img.shields.io/badge/%E4%B9%A6%E5%AE%89%20InternShannon-Skill-111827.svg)](./skills/ideer-daily-paper-chatbot/SKILL.md)
 [![AgentSkills Standard](https://img.shields.io/badge/AgentSkills-Standard-brightgreen.svg)](https://github.com/anthropics/agent-skills)
 
 [English](./README.en.md) · [技术文档](./docs/TECHNICAL.md) · [桌面 Demo](./docs/DESKTOP_DEMO.md)
@@ -216,6 +217,64 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 - 只想定时收到报告邮件，不想自己配服务器
 - 接受 GitHub Hosted Runner 的运行时长和并发限制
 - 主要需求是“抓取 + 生成跨源报告 + 发邮件”，不是长期在线 Web 服务
+
+### 方式四：书安 InternShannon / A3S Agent Skill
+
+如果你想把 iDeer 嵌到书安（InternShannon）里，让书安 Agent 代读论文、自己总结和打分，而不是调用 iDeer 内部 LLM API，用这个 chatbot-first skill：
+
+- Skill 目录：[`skills/ideer-daily-paper-chatbot/`](./skills/ideer-daily-paper-chatbot/)
+- 入口文件：[`skills/ideer-daily-paper-chatbot/SKILL.md`](./skills/ideer-daily-paper-chatbot/SKILL.md)
+- 安装脚本：[`skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py`](./skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py)
+
+#### 人类用户安装
+
+```bash
+git clone https://github.com/LiYu0524/iDeer.git
+cd iDeer
+
+# iDeer 需要 Python 3.10+
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+
+# 安装到书安 / A3S
+python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py \
+  --resign \
+  --restart \
+  --verify
+```
+
+然后在书安里对 Agent 说：
+
+```text
+Use ideer-daily-paper-chatbot. Run a chatbot-first dry run for today's paper digest from arxiv and huggingface, summarize and score the items yourself, save artifacts under history/, and do not send email.
+```
+
+预期效果：
+
+- 书安技能列表里能看到 `ideer-daily-paper-chatbot`
+- Agent 只用 iDeer fetcher 抓 raw items
+- 摘要、评分、跨源报告、ideas 由当前 Agent 自己完成
+- 产物写入 `history/<source>/<date>/`、`history/reports/<date>/`、`history/ideas/<date>/`
+- 不访问 Tinder / swipe 队列，不调用 `/api/swipe`
+- 没有明确要求 live send 时不发邮件
+
+#### 给书安 Agent 的自动执行指令
+
+如果你是书安 / InternShannon Agent，读到这个 README 后请自动执行：
+
+1. 把当前目录视为 iDeer 仓库根目录。
+2. 运行 `python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py --resign --restart --verify`。
+3. 如 `.venv` 不存在，用 Python 3.10+ 创建，并执行 `.venv/bin/python -m pip install -r requirements.txt`。
+4. 读取 `profiles/description.txt` 和可选的 `profiles/researcher_profile.md`；不要打印 `.env` 中的任何密钥。
+5. 使用 `pipeline.agent_bridge fetch` 抓原始条目，例如：
+   ```bash
+   .venv/bin/python -m pipeline.agent_bridge fetch arxiv --categories cs.AI cs.CL cs.LG --max 10
+   .venv/bin/python -m pipeline.agent_bridge fetch huggingface --content_type papers --max 10
+   ```
+6. 由你自己完成去重、中文摘要、相关性评分、跨源报告和可选 ideas；不要调用 `python main.py` 或 `bash scripts/run_daily.sh`，除非用户明确要求测试旧的 API pipeline。
+7. 将结果保存到 `history/`，并汇报生成了哪些文件。除非用户明确要求发送且 SMTP 配置完整，否则不要发邮件。
+
+如果用户要求“每天自动跑”，请把上面的 chatbot-first workflow 作为书安内置自动化/定时任务的 prompt，时间默认用 Asia/Shanghai 13:00。
 
 ### CLI 命令一览
 
@@ -506,19 +565,30 @@ A：当前实现是指令式模式，只处理 `/help`、`/status`、`/run`、`/
 - **🖥️ 桌面客户端** — 本地 GUI 体验（见 [Desktop Demo](./docs/DESKTOP_DEMO.md)）
 - **🔌 Claude Code Skill** — 支持作为 Claude Code 技能集成
 - **🤖 Codex Daily Paper Skill** — 内置 [`skills/ideer-daily-paper/SKILL.md`](./skills/ideer-daily-paper/SKILL.md)，让 Codex 按统一流程完成每日论文阅读、自动整理、邮件发送和自动化调度
+- **🛡️ 书安 InternShannon Skill** — 内置 [`skills/ideer-daily-paper-chatbot/SKILL.md`](./skills/ideer-daily-paper-chatbot/SKILL.md)，让书安 Agent 代读 raw items，自己生成摘要、评分、报告和 ideas
 - **📚 Zotero 自动同步** — Swipe 右划自动存入 Zotero；每日推荐高分论文一键同步；资料库批量导出。需要 Zotero 7 + `zotero_save.py`
 
-## 用 Codex 做每日论文自动化
+## 用 Agent 做每日论文自动化
 
-如果你希望把 iDeer 变成 Codex 的每日自动化任务，推荐把仓库里的 [`skills/ideer-daily-paper/SKILL.md`](./skills/ideer-daily-paper/SKILL.md) 作为操作规范。
+如果你希望把 iDeer 变成 Agent 的每日自动化任务，有两种模式：
 
-典型流程是：
+- **API pipeline 模式**：用 [`skills/ideer-daily-paper/SKILL.md`](./skills/ideer-daily-paper/SKILL.md)，按 iDeer 原生 `main.py` / `scripts/run_daily.sh` 路径执行，需要配置 LLM API。
+- **Chatbot-first 模式**：用 [`skills/ideer-daily-paper-chatbot/SKILL.md`](./skills/ideer-daily-paper-chatbot/SKILL.md)，只用 iDeer fetcher 抓 raw items，摘要/评分/report/ideas 由当前 Agent 自己完成，更适合书安、Codex、Gemini、ChatGPT 这类已经有模型能力的 Agent。
+
+API pipeline 的典型流程是：
 
 1. 先按 skill 的要求补齐 `.env`、`profiles/description.txt` 和可选的 `profiles/researcher_profile.md`
 2. 先做一次 dry run，确认 `history/` 里已经产出日报、report 或 ideas
 3. 再让 Codex automation 每天北京时间 13:00 定时调用 `bash scripts/run_daily.sh`
 
-这个 skill 不是重新实现推荐逻辑，而是明确告诉 Codex 什么时候跑 `main.py`，什么时候跑 `scripts/run_daily.sh`，如何验证产物，以及什么时候可以安全发邮件
+Chatbot-first 的典型流程是：
+
+1. 先安装 `ideer-daily-paper-chatbot` 到书安 / A3S，或让 Codex 直接读取该 skill
+2. 让 Agent 抓 `arxiv semanticscholar huggingface` 的 raw items
+3. 让 Agent 自己完成总结、打分、报告和 ideas
+4. 将产物保存到 `history/`，只有在用户明确要求且 SMTP 完整时才发送邮件
+
+这两个 skill 都不是重新实现抓取逻辑，而是明确告诉 Agent 哪条路径可用、哪些路径要避开、如何验证产物，以及什么时候可以安全发邮件。
 
 ## 缓存管理
 

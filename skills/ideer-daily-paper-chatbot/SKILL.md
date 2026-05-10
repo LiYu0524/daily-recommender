@@ -1,13 +1,19 @@
 ---
 name: ideer-daily-paper-chatbot
 description: "Use iDeer as a daily paper-reading workflow for chatbot-first users such as Codex, Gemini, or ChatGPT. Keep the original iDeer paper-digest setup, source selection, history validation, email/report/ideas workflow, but replace in-repo LLM API summarization and scoring with the current chatbot session. 适用于不用单独配置 OpenAI/SiliconFlow/Ollama API key 的每日论文整理、报告、想法生成与自动化。"
-argument-hint: "[--dry-run] [--send-email] [--sources ...] [--with-report] [--with-ideas] [--date YYYY-MM-DD]"
-allowed-tools: Bash(*), Read, Write, Edit, Grep, Glob, Web, Skill
+allowed-tools: "read(*), write(history/**), write(chatbot_test_outputs/**), grep(*), glob(*), bash(*), web_fetch(*), web_search(*)"
 ---
 
 # iDeer Daily Paper Chatbot
 
 Use this skill when the user wants the iDeer daily-paper workflow but does not want the repo to call its own LLM API. The chatbot should do the reading, scoring, grouping, report writing, and idea generation directly in the current conversation.
+
+## Constants
+
+- `PROJECT_DIR`: the current iDeer repository root. When installed by `scripts/install_internshannon_skill.py`, this becomes the absolute clone path.
+- `SKILL_DIR`: `skills/ideer-daily-paper-chatbot` inside the iDeer repository.
+- Default sources: `arxiv semanticscholar huggingface`
+- First validation mode: dry run only, save local artifacts, do not send email, do not enable recurring schedules.
 
 ## Core rule
 
@@ -19,6 +25,8 @@ Keep as much of the original iDeer workflow as possible:
 - reuse `history/` as the artifact destination when saving outputs
 
 But do **not** rely on `main.py` for any step that requires `MODEL_NAME`, `BASE_URL`, `API_KEY`, or Ollama. Instead, fetch raw items and have the chatbot perform the intelligence layer.
+
+Never use the Tinder/swipe product path for this skill. Do not call `/api/swipe`, read `client/src/swipeView.tsx` for workflow state, or use saved swipe queues as recommendation input.
 
 ## What stays the same
 
@@ -53,7 +61,7 @@ Check when needed:
 - `profiles/researcher_profile.md`
 - `profiles/x_accounts.txt`
 
-If `.env` does not exist, copy from `.env.example`. Do not invent secrets.
+If `.env` does not exist, continue with public-source dry run behavior. Do not create `.env` or invent secrets unless the user explicitly asks for setup/fix work.
 
 ## Modes
 
@@ -84,7 +92,7 @@ Read the profile and decide:
 - whether email is requested
 - whether the request is one-off or recurring
 
-Use [references/presets.md](references/presets.md) for presets.
+Use `skills/ideer-daily-paper-chatbot/references/presets.md` for presets.
 
 ### Step 2: Fetch raw items
 
@@ -99,6 +107,13 @@ Prefer the repo fetchers first when the repo is available:
 If the repo is not available or a fetcher is broken, use browsing and cite the public source pages.
 
 Fetch raw candidates only. Do not call the repo's LLM scoring path.
+
+Run commands from `PROJECT_DIR`. Prefer `.venv/bin/python`; if the virtualenv is missing, use Python 3.10+ to create it before fetching:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+```
 
 ### Step 3: Deduplicate and curate
 
@@ -125,7 +140,7 @@ It is acceptable for chatbot-first runs to write fewer files than the original p
 If the user wants HTML artifacts without touching the main repo scripts, use the bundled renderer:
 
 ```bash
-python skills/ideer-daily-paper-chatbot/scripts/render_chatbot_artifacts.py \
+.venv/bin/python skills/ideer-daily-paper-chatbot/scripts/render_chatbot_artifacts.py \
   --date YYYY-MM-DD \
   --base-dir <artifact-dir>
 ```
@@ -147,7 +162,7 @@ Never send email on the first validation run unless the user clearly asked for a
 
 For chatbot-first automation, prefer Codex automation over cron. Use the repo root as the working directory and write the prompt so the chatbot fetches raw source items, performs summarization itself, saves artifacts, and only sends email if SMTP exists.
 
-See [references/automation.md](references/automation.md).
+See `skills/ideer-daily-paper-chatbot/references/automation.md`.
 
 ## Safe command patterns
 

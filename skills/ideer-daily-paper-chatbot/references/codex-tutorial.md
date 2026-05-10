@@ -1,6 +1,6 @@
-# Codex Tutorial
+# Agent Tutorial
 
-This note teaches a Codex user how to use `ideer-daily-paper-chatbot` inside the iDeer repo.
+This note teaches Codex, InternShannon / 书安, or another coding agent how to use `ideer-daily-paper-chatbot` inside the iDeer repo.
 
 ## What this skill is for
 
@@ -24,6 +24,24 @@ You do **not** need:
 
 You only need the repo, Python environment, and working fetchers.
 
+## Install into InternShannon / 书安
+
+From the iDeer repo root, run:
+
+```bash
+python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py \
+  --resign \
+  --restart \
+  --verify
+```
+
+This installs a materialized `ideer-daily-paper-chatbot.md` into:
+
+- `~/.a3s/workspace/skills/`
+- `/Applications/Intern Shannon.app/Contents/Resources/skills/` when the app exists
+
+On InternShannon v0.2.1, the bundled app install path is the one that makes the skill visible in `/api/agent/skills`.
+
 ## Recommended workflow
 
 ### 1. Open the iDeer repo
@@ -31,7 +49,7 @@ You only need the repo, Python environment, and working fetchers.
 Work in the repo root:
 
 ```bash
-cd /Users/ursula/Documents/Playground/iDeer
+cd /path/to/iDeer
 ```
 
 ### 2. Make sure the repo can fetch papers
@@ -48,7 +66,7 @@ Typical user intent:
 - decide whether they want only a digest, or digest + report + ideas
 - decide whether they want local files only, or a later email step
 
-### 3. Ask Codex to run the chatbot-first workflow
+### 3. Ask the agent to run the chatbot-first workflow
 
 Good prompt examples:
 
@@ -64,9 +82,9 @@ Use ideer-daily-paper-chatbot to run a dry run for today's paper digest, save ar
 Use ideer-daily-paper-chatbot to fetch raw papers, summarize them directly in chat, and write a report plus ideas under a test output directory.
 ```
 
-### 4. What Codex should do
+### 4. What the agent should do
 
-When this skill is used correctly, Codex should:
+When this skill is used correctly, the agent should:
 
 1. inspect `.env` and the profile files
 2. fetch raw items with repo fetchers or browsing

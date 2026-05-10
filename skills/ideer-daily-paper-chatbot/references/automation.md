@@ -1,6 +1,6 @@
 # iDeer Daily Paper Chatbot Automation
 
-Use this reference when creating a recurring automation for the chatbot-first workflow.
+Use this reference when creating a recurring automation for the chatbot-first workflow in Codex, InternShannon / 书安, or another agent runtime.
 
 ## Default schedule
 
@@ -17,6 +17,17 @@ FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYHOUR=13;BYMINUTE=0
 ## Working directory
 
 Use the user's local iDeer repo root.
+
+## InternShannon / 书安 setup command
+
+If the skill is not yet visible in the local InternShannon skill list, run this once from the iDeer repo root:
+
+```bash
+python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py \
+  --resign \
+  --restart \
+  --verify
+```
 
 ## Recommended automation prompt
 
