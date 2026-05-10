@@ -7,6 +7,8 @@ Use this reference when creating a recurring automation for the chatbot-first wo
 - Time zone: `Asia/Shanghai`
 - Time: `13:00`
 - Frequency: every day
+- InternShannon / 书安 v0.2.1 exposes a workflow `trigger-schedule` node with `cron_expression` and `timezone`.
+- First installation validation should stay dry-run only; enable the recurring task only after local artifacts are correct.
 
 Weekly form for Codex automation UIs:
 
@@ -34,6 +36,31 @@ python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py 
 ```text
 Run the iDeer daily paper workflow in chatbot-first mode. Use .env, profiles/description.txt, and profiles/researcher_profile.md as the source of truth. Fetch raw items from the configured sources using the repo fetchers when possible, or browse the public source pages when necessary. Do not rely on the repo's own LLM API pipeline for summarization, scoring, reports, or ideas; perform those steps directly in the chatbot. Save markdown/report/ideas artifacts under history/, verify what was created, and only send email if SMTP configuration is complete and a live send is explicitly requested.
 ```
+
+## InternShannon scheduled workflow evidence
+
+On a local InternShannon v0.2.1 install, this API exposes the scheduled trigger node:
+
+```bash
+curl -fsS http://127.0.0.1:29653/api/workflows/node-types | python3 -m json.tool
+```
+
+Expected node:
+
+```json
+{
+  "node_type": "trigger-schedule",
+  "label": "定时触发",
+  "default_data": {
+    "cron_expression": "0 9 * * *",
+    "timezone": "UTC",
+    "mode": "cron",
+    "frequency": "daily"
+  }
+}
+```
+
+For iDeer, set `cron_expression` to the desired daily schedule and `timezone` to `Asia/Shanghai`.
 
 ## Minimum automation checks
 

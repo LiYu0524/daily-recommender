@@ -258,6 +258,27 @@ Use ideer-daily-paper-chatbot. Run a chatbot-first dry run for today's paper dig
 - 不访问 Tinder / swipe 队列，不调用 `/api/swipe`
 - 没有明确要求 live send 时不发邮件
 
+#### 已验证结果
+
+本仓库自带一份本机验证记录：[`docs/internshannon-skill-validation-2026-05-10.md`](./docs/internshannon-skill-validation-2026-05-10.md)。
+
+验证结论：
+
+- 书安 v0.2.1 本地 API `GET /api/agent/skills` 可以发现 `ideer-daily-paper-chatbot`
+- 安装脚本会把 skill 写入 `~/.a3s/workspace/skills/` 和 `/Applications/Intern Shannon.app/Contents/Resources/skills/`
+- 本地 `codesign` 校验通过；`spctl` Gatekeeper 评估仍显示 rejected，属于应用分发/公证信任问题，不影响本地 skill API 发现
+- `arxiv` 和 `huggingface` 小样本 dry run 已跑通，摘要/评分由 agent 完成，没有调用 `main.py` 或旧 LLM API pipeline
+- 书安工作流节点包含 `trigger-schedule`，支持 cron 表达式定时触发；首次验证没有创建或启用每日任务
+
+#### 定时任务
+
+书安支持两类自动化路径：
+
+- **书安 Workflow 定时触发**：使用 `trigger-schedule` 节点，配置 `cron_expression` 和 `timezone`，再让工作流执行 chatbot-first iDeer prompt。
+- **Agent 递归任务**：在支持 `/loop`、`/cron-list`、`/cron-cancel` 的 A3S Agent 环境中，用每日 prompt 调度 iDeer skill。
+
+iDeer skill 推荐默认时间是 `Asia/Shanghai 13:00`。第一次只做 dry run；确认 `history/` 产物和邮件配置后，再启用每日发送。
+
 #### 给书安 Agent 的自动执行指令
 
 如果你是书安 / InternShannon Agent，读到这个 README 后请自动执行：
