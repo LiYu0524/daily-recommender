@@ -20,6 +20,18 @@ FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYHOUR=13;BYMINUTE=0
 
 Use the user's local iDeer repo root.
 
+## First-run setup before automation
+
+If `.env` is missing, `SMTP_RECEIVER` is empty, or `profiles/description.txt` is missing/empty, run first-run setup before creating a recurring task. The agent should ask for receiver email, research direction, sources, and preferred delivery time, then call:
+
+```bash
+python3 skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py
+```
+
+Pass the collected answers as JSON on stdin.
+
+The setup helper saves the schedule preference with `schedule_enabled=false`. Do not create a recurring task until a dry run has produced local artifacts and the user confirms automation.
+
 ## InternShannon / 书安 setup command
 
 If the skill is not yet visible in the local InternShannon skill list, run this once from the iDeer repo root:
@@ -62,9 +74,12 @@ Expected node:
 
 For iDeer, set `cron_expression` to the desired daily schedule and `timezone` to `Asia/Shanghai`.
 
+The first-run helper records the user's preferred time in `state/ideer_chatbot_setup.json` and `.web_config.json`, but it intentionally leaves `schedule_enabled` false.
+
 ## Minimum automation checks
 
 - confirm `.env` exists
+- confirm `SMTP_RECEIVER` exists
 - confirm `profiles/description.txt`
 - confirm `profiles/researcher_profile.md` when idea generation is enabled
 - confirm source fetchers or public source pages are reachable

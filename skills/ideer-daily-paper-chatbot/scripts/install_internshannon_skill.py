@@ -42,13 +42,21 @@ def split_frontmatter(text: str) -> tuple[str, str, str]:
 def concrete_allowed_tools(repo_root: Path) -> str:
     skill_dir = repo_root / "skills" / SKILL_NAME
     renderer = skill_dir / "scripts" / "render_chatbot_artifacts.py"
+    setup_helper = skill_dir / "scripts" / "setup_chatbot_config.py"
     return ", ".join(
         [
             f"read({repo_root}/**)",
+            f"write({repo_root}/.env)",
+            f"write({repo_root}/.web_config.json)",
+            f"write({repo_root}/.client_config.json)",
+            f"write({repo_root}/profiles/**)",
+            f"write({repo_root}/state/**)",
             f"write({repo_root}/history/**)",
             f"write({repo_root}/chatbot_test_outputs/**)",
             "grep(*)",
             "glob(*)",
+            f"bash(cd {repo_root} && python3 {setup_helper}:*)",
+            f"bash(cd {repo_root} && .venv/bin/python {setup_helper}:*)",
             f"bash(cd {repo_root} && .venv/bin/python -m pipeline.agent_bridge fetch:*)",
             f"bash(cd {repo_root} && .venv/bin/python -m pipeline.agent_bridge save-items:*)",
             f"bash(cd {repo_root} && .venv/bin/python -m pipeline.agent_bridge save-ideas:*)",
@@ -80,12 +88,15 @@ def materialize_skill(repo_root: Path) -> str:
 
     skill_dir = repo_root / "skills" / SKILL_NAME
     renderer = skill_dir / "scripts" / "render_chatbot_artifacts.py"
+    setup_helper = skill_dir / "scripts" / "setup_chatbot_config.py"
     replacements = {
         "- `PROJECT_DIR`: the current iDeer repository root. When installed by `scripts/install_internshannon_skill.py`, this becomes the absolute clone path.": f"- `PROJECT_DIR`: `{repo_root}`",
         "- `SKILL_DIR`: `skills/ideer-daily-paper-chatbot` inside the iDeer repository.": f"- `SKILL_DIR`: `{skill_dir}`",
         "`skills/ideer-daily-paper-chatbot/references/presets.md`": f"`{skill_dir / 'references' / 'presets.md'}`",
         "`skills/ideer-daily-paper-chatbot/references/automation.md`": f"`{skill_dir / 'references' / 'automation.md'}`",
         ".venv/bin/python skills/ideer-daily-paper-chatbot/scripts/render_chatbot_artifacts.py": f".venv/bin/python {renderer}",
+        ".venv/bin/python skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py": f".venv/bin/python {setup_helper}",
+        "python3 skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py": f"python3 {setup_helper}",
     }
     for old, new in replacements.items():
         rest = rest.replace(old, new)

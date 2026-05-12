@@ -225,6 +225,7 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 - Skill 目录：[`skills/ideer-daily-paper-chatbot/`](./skills/ideer-daily-paper-chatbot/)
 - 入口文件：[`skills/ideer-daily-paper-chatbot/SKILL.md`](./skills/ideer-daily-paper-chatbot/SKILL.md)
 - 安装脚本：[`skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py`](./skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py)
+- 首次配置脚本：[`skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py`](./skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py)
 
 #### 人类用户安装
 
@@ -248,6 +249,16 @@ python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py 
 ```text
 Use ideer-daily-paper-chatbot. Run a chatbot-first dry run for today's paper digest from arxiv and huggingface, summarize and score the items yourself, save artifacts under history/, and do not send email.
 ```
+
+如果是第一次安装、还没有 `.env`，书安 Agent 会先进入配置向导。它会询问收件邮箱、研究方向、信息源和推送时间；Scholar/个人主页 URL、SMTP 发件配置和 ideas 生成可以跳过。默认信息源是 `arxiv + semanticscholar + huggingface`，默认推送偏好是 `Asia/Shanghai 13:00 daily`，但首次只保存偏好，不启用定时任务，也不自动发邮件。
+
+Agent 收集完答案后会调用：
+
+```bash
+python3 skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py
+```
+
+调用时通过 stdin 传入 JSON（字段示例见 skill 文档）。该脚本会写入 `.env`、`profiles/description.txt`、可选 `profiles/researcher_profile.md`、`state/ideer_chatbot_setup.json`、`.web_config.json` 和 `.client_config.json`。如果缺 SMTP 密码，它会明确保持 `SEND_REPORT_EMAIL=0`。
 
 预期效果：
 
@@ -286,14 +297,15 @@ iDeer skill 推荐默认时间是 `Asia/Shanghai 13:00`。第一次只做 dry ru
 1. 把当前目录视为 iDeer 仓库根目录。
 2. 运行 `python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py --resign --restart --verify`。
 3. 如 `.venv` 不存在，用 Python 3.10+ 创建，并执行 `.venv/bin/python -m pip install -r requirements.txt`。
-4. 读取 `profiles/description.txt` 和可选的 `profiles/researcher_profile.md`；不要打印 `.env` 中的任何密钥。
-5. 使用 `pipeline.agent_bridge fetch` 抓原始条目，例如：
+4. 检查 `.env`、`profiles/description.txt` 和可选的 `profiles/researcher_profile.md`；不要打印 `.env` 中的任何密钥。
+5. 如果 `.env` 不存在、缺 `SMTP_RECEIVER`，或 `profiles/description.txt` 为空，先向用户询问收件邮箱、研究方向、信息源和推送时间，然后把答案作为 JSON 通过 stdin 传给 `skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py`。首次只保存配置，不启用定时、不发送邮件。
+6. 使用 `pipeline.agent_bridge fetch` 抓原始条目，例如：
    ```bash
    .venv/bin/python -m pipeline.agent_bridge fetch arxiv --categories cs.AI cs.CL cs.LG --max 10
    .venv/bin/python -m pipeline.agent_bridge fetch huggingface --content_type papers --max 10
    ```
-6. 由你自己完成去重、中文摘要、相关性评分、跨源报告和可选 ideas；不要调用 `python main.py` 或 `bash scripts/run_daily.sh`，除非用户明确要求测试旧的 API pipeline。
-7. 将结果保存到 `history/`，并汇报生成了哪些文件。除非用户明确要求发送且 SMTP 配置完整，否则不要发邮件。
+7. 由你自己完成去重、中文摘要、相关性评分、跨源报告和可选 ideas；不要调用 `python main.py` 或 `bash scripts/run_daily.sh`，除非用户明确要求测试旧的 API pipeline。
+8. 将结果保存到 `history/`，并汇报生成了哪些文件。除非用户明确要求发送且 SMTP 配置完整，否则不要发邮件。
 
 如果用户要求“每天自动跑”，请把上面的 chatbot-first workflow 作为书安内置自动化/定时任务的 prompt，时间默认用 Asia/Shanghai 13:00。
 
