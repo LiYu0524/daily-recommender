@@ -18,7 +18,7 @@
 - 在 GitHub Hosted Runner 上运行
 - 只发送一封跨源汇总报告邮件
 - 不发送每个 source 的单独邮件
-- 默认源是 `github arxiv semanticscholar huggingface`
+- 默认源是 `github arxiv semanticscholar huggingface rss`
 - 默认时间是 `UTC 00:00`，也就是北京时间 `08:00`
 - 会把 `history/reports/` 和运行日志上传成 artifact
 
@@ -117,7 +117,7 @@ I care about LLM agents, AI infra, open-source model releases, evaluation, safet
 |------|------|------|------|
 | `IDEER_PROVIDER` | 推荐 | `openai` | API provider 名称 |
 | `IDEER_TEMPERATURE` | 推荐 | `0.5` | 采样温度 |
-| `IDEER_DAILY_SOURCES` | 推荐 | `github arxiv semanticscholar huggingface` | 选择跑哪些源 |
+| `IDEER_DAILY_SOURCES` | 推荐 | `github arxiv semanticscholar huggingface rss` | 选择跑哪些源 |
 | `IDEER_REPORT_TITLE` | 推荐 | `Daily Personal Briefing` | 报告邮件标题 |
 | `IDEER_RESEARCHER_PROFILE_TEXT` | 可选但推荐 | 空 | 更长的研究者画像 |
 | `IDEER_NUM_WORKERS` | 可选 | `6` | 并发 worker 数 |
@@ -137,6 +137,8 @@ I care about LLM agents, AI infra, open-source model releases, evaluation, safet
 | `IDEER_HF_CONTENT_TYPES` | 你启用了 `huggingface` |
 | `IDEER_HF_MAX_PAPERS` | 你启用了 `huggingface` |
 | `IDEER_HF_MAX_MODELS` | 你启用了 `huggingface` |
+| `IDEER_RSS_URLS` | 你启用了 `rss`，默认 Juya AI Daily |
+| `IDEER_RSS_MAX_ITEMS` | 你启用了 `rss` |
 | `IDEER_SS_QUERIES` | 你启用了 `semanticscholar` 并想手工指定 query |
 | `IDEER_SS_MAX_RESULTS` | 你启用了 `semanticscholar` |
 | `IDEER_SS_MAX_PAPERS` | 你启用了 `semanticscholar` |
@@ -159,7 +161,7 @@ I care about LLM agents, AI infra, open-source model releases, evaluation, safet
 示例：
 
 ```text
-github arxiv semanticscholar huggingface
+github arxiv semanticscholar huggingface rss
 ```
 
 其他常见组合：
@@ -173,7 +175,7 @@ github huggingface semanticscholar
 ```
 
 ```text
-arxiv semanticscholar huggingface twitter
+arxiv semanticscholar huggingface rss twitter
 ```
 
 注意：
@@ -184,10 +186,10 @@ arxiv semanticscholar huggingface twitter
 
 ## 7. 一个最小可运行配置
 
-如果你想先最小成本跑通，建议先只用这 4 个默认源：
+如果你想先最小成本跑通，建议先用这些默认源：
 
 ```text
-github arxiv semanticscholar huggingface
+github arxiv semanticscholar huggingface rss
 ```
 
 最低只需要这些 Secrets：
@@ -207,7 +209,7 @@ IDEER_DESCRIPTION_TEXT
 再加一个推荐项：
 
 ```text
-IDEER_DAILY_SOURCES=github arxiv semanticscholar huggingface
+IDEER_DAILY_SOURCES=github arxiv semanticscholar huggingface rss
 ```
 
 ## 8. 第一次手动运行

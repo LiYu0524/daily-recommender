@@ -12,7 +12,8 @@ Use this skill when the user wants the iDeer daily-paper workflow but does not w
 
 - `PROJECT_DIR`: the current iDeer repository root. When installed by `scripts/install_internshannon_skill.py`, this becomes the absolute clone path.
 - `SKILL_DIR`: `skills/ideer-daily-paper-chatbot` inside the iDeer repository.
-- Default sources: `arxiv semanticscholar huggingface`
+- Default sources: `arxiv semanticscholar huggingface rss`
+- Default RSS feed: `https://imjuya.github.io/juya-ai-daily/rss.xml`
 - First-run schedule preference: `Asia/Shanghai` daily at `13:00`, saved but not enabled.
 - First validation mode: dry run only, save local artifacts, do not send email, do not enable recurring schedules.
 
@@ -89,7 +90,7 @@ Ask for:
 
 Use these defaults when the user accepts defaults or gives an incomplete answer:
 
-- sources: `arxiv semanticscholar huggingface`
+- sources: `arxiv semanticscholar huggingface rss`
 - schedule: `daily`, `13:00`, `Asia/Shanghai`
 - arXiv categories: `cs.AI cs.CL cs.LG`
 - Hugging Face content type: `papers`
@@ -120,7 +121,7 @@ cat <<'JSON' | .venv/bin/python skills/ideer-daily-paper-chatbot/scripts/setup_c
   "receiver": "user@example.com",
   "description": "User research interests here",
   "scholar_urls": [],
-  "sources": ["arxiv", "semanticscholar", "huggingface"],
+  "sources": ["arxiv", "semanticscholar", "huggingface", "rss"],
   "schedule": {
     "frequency": "daily",
     "time": "13:00",
@@ -139,7 +140,8 @@ After setup, run a small chatbot-first dry run, such as `arxiv` and `huggingface
 
 ## Source defaults
 
-- Default paper sources: `arxiv semanticscholar huggingface`
+- Default paper/news sources: `arxiv semanticscholar huggingface rss`
+- RSS defaults to Juya AI Daily: `https://imjuya.github.io/juya-ai-daily/rss.xml`
 - Add `github` only when the user wants code/repo signals
 - Add `twitter` only when the user explicitly wants social signals and credentials exist
 - For Hugging Face, default to papers only
@@ -168,6 +170,7 @@ Prefer the repo fetchers first when the repo is available:
 - `fetchers/arxiv_fetcher.py`
 - `fetchers/huggingface_fetcher.py`
 - `fetchers/semanticscholar_fetcher.py`
+- `fetchers/rss_fetcher.py`
 - `fetchers/github_fetcher.py`
 - `fetchers/twitter_fetcher.py`
 

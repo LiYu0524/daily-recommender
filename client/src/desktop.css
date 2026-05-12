@@ -868,6 +868,10 @@ button,
   --source-accent: #d04a4a;
 }
 
+.source-picker-card[data-source="rss"] {
+  --source-accent: #0e7490;
+}
+
 .source-picker-card:hover {
   transform: translateY(-1px);
 }
@@ -923,6 +927,10 @@ button,
 
 .source-badge[data-source="arxiv"] {
   --source-accent: #b91c1c;
+}
+
+.source-badge[data-source="rss"] {
+  --source-accent: #0e7490;
 }
 
 .source-icon {

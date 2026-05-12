@@ -165,6 +165,7 @@ python -m pipeline.agent_bridge fetch arxiv --categories cs.AI cs.CL cs.LG --max
 python -m pipeline.agent_bridge fetch huggingface --content_type papers --max 30
 python -m pipeline.agent_bridge fetch github --max 20
 python -m pipeline.agent_bridge fetch semanticscholar --queries "agent safety" "trustworthy AI" --max 30
+python -m pipeline.agent_bridge fetch rss --max 30
 ```
 
 Each command prints JSON to stdout. Save output to a temp file or read directly.
@@ -278,6 +279,7 @@ When running as a scheduled/automated task, always use **auto** mode (no interac
 | Fetch HF | `python -m pipeline.agent_bridge fetch huggingface --content_type papers --max 30` |
 | Fetch GitHub | `python -m pipeline.agent_bridge fetch github --max 20` |
 | Fetch SS | `python -m pipeline.agent_bridge fetch semanticscholar --queries "q1" "q2" --max 30` |
+| Fetch RSS | `python -m pipeline.agent_bridge fetch rss --max 30` |
 | Save items | `echo JSON | python -m pipeline.agent_bridge save-items SOURCE` |
 | Save ideas | `echo JSON | python -m pipeline.agent_bridge save-ideas` |
 | Send email | `echo HTML | python -m pipeline.agent_bridge send-email --subject "title"` |

@@ -120,8 +120,9 @@ SMTP_PORT=465
 SMTP_SENDER=xxx
 SMTP_RECEIVER=xxx
 SMTP_PASSWORD=xxx
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=1
@@ -131,7 +132,7 @@ RESEARCHER_PROFILE=profiles/researcher_profile.md
 bash scripts/run_daily.sh
 ```
 
-默认模式已经是论文阅读优先：`arxiv + semanticscholar + huggingface`，并且会同时生成论文摘要、跨源 report 和 research ideas。
+默认模式已经是论文阅读优先并带 AI 日报补充：`arxiv + semanticscholar + huggingface + rss`，其中 RSS 默认订阅 Juya AI Daily，并且会同时生成论文摘要、跨源 report 和 research ideas。
 
 **两种定时方式：**
 

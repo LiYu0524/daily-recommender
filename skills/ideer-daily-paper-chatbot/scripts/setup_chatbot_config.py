@@ -13,8 +13,9 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_SOURCES = ["arxiv", "semanticscholar", "huggingface"]
-ALLOWED_SOURCES = {"github", "huggingface", "twitter", "arxiv", "semanticscholar", "pubmed"}
+DEFAULT_SOURCES = ["arxiv", "semanticscholar", "huggingface", "rss"]
+ALLOWED_SOURCES = {"github", "huggingface", "twitter", "arxiv", "semanticscholar", "pubmed", "rss"}
+DEFAULT_RSS_URLS = ["https://imjuya.github.io/juya-ai-daily/rss.xml"]
 DEFAULT_TIMEZONE = "Asia/Shanghai"
 DEFAULT_SCHEDULE_TIME = "13:00"
 DEFAULT_FREQUENCY = "daily"
@@ -251,6 +252,8 @@ def _build_ui_config(existing: dict[str, Any], env: dict[str, str], setup: dict[
         "ss_max_papers": _int(env.get("SS_MAX_PAPERS"), int(existing.get("ss_max_papers", 30) or 30)),
         "ss_year": env.get("SS_YEAR", existing.get("ss_year", "")),
         "ss_api_key": env.get("SS_API_KEY", existing.get("ss_api_key", "")),
+        "rss_urls": env.get("RSS_URLS", existing.get("rss_urls", " ".join(DEFAULT_RSS_URLS))),
+        "rss_max_items": _int(env.get("RSS_MAX_ITEMS"), int(existing.get("rss_max_items", 30) or 30)),
         "schedule_enabled": False,
         "schedule_frequency": schedule["frequency"],
         "schedule_time": schedule["time"],
@@ -370,6 +373,8 @@ def main() -> int:
         "HF_CONTENT_TYPES": "papers",
         "HF_MAX_PAPERS": "30",
         "HF_MAX_MODELS": "15",
+        "RSS_URLS": " ".join(DEFAULT_RSS_URLS),
+        "RSS_MAX_ITEMS": "30",
         "X_RAPIDAPI_KEY": x_api_key,
         "X_RAPIDAPI_HOST": "twitter-api45.p.rapidapi.com",
         "X_ACCOUNTS_FILE": "profiles/x_accounts.txt",
@@ -393,6 +398,7 @@ def main() -> int:
         "configured_at": datetime.now(timezone.utc).isoformat(),
         "receiver": final_env.get("SMTP_RECEIVER", receiver),
         "sources": sources,
+        "rss_urls": _list(final_env.get("RSS_URLS")) or DEFAULT_RSS_URLS,
         "schedule": schedule,
         "send_email": False,
         "smtp_configured": smtp_configured,

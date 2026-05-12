@@ -26,6 +26,7 @@ const SOURCE_OPTIONS: Array<{ key: SourceName; label: string; description: strin
   { key: "huggingface", label: "HuggingFace", description: "论文与模型动态" },
   { key: "twitter", label: "X / Twitter", description: "账号时间线和圈层信号" },
   { key: "arxiv", label: "arXiv", description: "新论文抓取与筛选" },
+  { key: "rss", label: "RSS", description: "Juya AI Daily 等订阅" },
 ];
 
 const DEFAULT_CONFIG: ConfigData = {
@@ -54,10 +55,12 @@ const DEFAULT_CONFIG: ConfigData = {
   arxiv_categories: "cs.AI",
   arxiv_max_entries: 100,
   arxiv_max_papers: 60,
+  rss_urls: "https://imjuya.github.io/juya-ai-daily/rss.xml",
+  rss_max_items: 30,
 };
 
 const DEFAULT_RUN_FORM: RunRequest = {
-  sources: ["github", "huggingface"],
+  sources: ["github", "huggingface", "rss"],
   generate_report: false,
   generate_ideas: false,
   save: true,
@@ -459,6 +462,11 @@ function ConfigView(props: { config: ConfigData; savingConfig: boolean; onSave: 
         <label className="field"><span>arXiv Categories</span><input value={config.arxiv_categories} onChange={(event) => update("arxiv_categories", event.target.value)} /></label>
         <label className="field"><span>arXiv Max Entries</span><input type="number" value={config.arxiv_max_entries} onChange={(event) => update("arxiv_max_entries", Number(event.target.value))} /></label>
         <label className="field"><span>arXiv Max Papers</span><input type="number" value={config.arxiv_max_papers} onChange={(event) => update("arxiv_max_papers", Number(event.target.value))} /></label>
+      </div>
+
+      <div className="field-grid two-columns">
+        <label className="field"><span>RSS URLs</span><input value={config.rss_urls} onChange={(event) => update("rss_urls", event.target.value)} /></label>
+        <label className="field"><span>RSS Max Items</span><input type="number" value={config.rss_max_items} onChange={(event) => update("rss_max_items", Number(event.target.value))} /></label>
       </div>
 
       <label className="field"><span>默认兴趣描述</span><textarea rows={6} value={config.description} onChange={(event) => update("description", event.target.value)} /></label>

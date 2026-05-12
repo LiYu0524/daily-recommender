@@ -160,6 +160,8 @@ def cmd_fetch(args):
         argv.extend(["--queries"] + args.queries)
     if args.content_type:
         argv.extend(["--content_type"] + args.content_type)
+    if args.rss_urls:
+        argv.extend(["--rss_urls"] + args.rss_urls)
 
     sys.argv = argv
     from pipeline.agent_bridge import main
@@ -216,7 +218,7 @@ def main():
     # --- run ---
     p_run = sub.add_parser("run", help="Run the daily recommender pipeline")
     p_run.add_argument("--sources", nargs="+",
-                       choices=["github", "huggingface", "twitter", "arxiv", "semanticscholar", "pubmed"],
+                       choices=["github", "huggingface", "twitter", "arxiv", "semanticscholar", "pubmed", "rss"],
                        help="Information sources to run")
     p_run.add_argument("--save", action="store_true", default=True, help="Save results to history (default: true)")
     p_run.add_argument("--no-save", dest="save", action="store_false", help="Don't save results")
@@ -229,11 +231,12 @@ def main():
 
     # --- fetch ---
     p_fetch = sub.add_parser("fetch", help="Fetch items from a source (JSON to stdout)")
-    p_fetch.add_argument("source", choices=["arxiv", "huggingface", "github", "semanticscholar", "twitter", "pubmed"])
+    p_fetch.add_argument("source", choices=["arxiv", "huggingface", "github", "semanticscholar", "twitter", "pubmed", "rss"])
     p_fetch.add_argument("--categories", nargs="+", default=None)
     p_fetch.add_argument("--max", type=int, default=30)
     p_fetch.add_argument("--queries", nargs="+", default=None)
     p_fetch.add_argument("--content-type", dest="content_type", nargs="+", default=None)
+    p_fetch.add_argument("--rss-urls", dest="rss_urls", nargs="+", default=None)
 
     # --- clean ---
     p_clean = sub.add_parser("clean", help="Clear caches and/or history")

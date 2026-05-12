@@ -7,8 +7,9 @@ Use these presets when Codex needs to choose a starting configuration without en
 Use when the user only wants a saved digest and does not want outbound email yet.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=0
 SEND_REPORT_EMAIL=0
 GENERATE_IDEAS=0
@@ -17,7 +18,7 @@ GENERATE_IDEAS=0
 Recommended run:
 
 ```bash
-python main.py --sources arxiv semanticscholar huggingface --save --skip_source_emails
+python main.py --sources arxiv semanticscholar huggingface rss --save --skip_source_emails
 ```
 
 ## `paper-email`
@@ -25,8 +26,9 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 Use when the user wants a paper digest emailed every day.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=0
@@ -48,8 +50,9 @@ Use when the user also wants research idea generation from the daily reading.
 This is the repo default.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=1
@@ -74,8 +77,9 @@ bash scripts/run_daily.sh
 Use when the user wants papers and implementation signals together.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface github"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss github"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=0
@@ -85,6 +89,7 @@ GENERATE_IDEAS=0
 
 - Prefer `arxiv + semanticscholar` for literature coverage.
 - Keep `huggingface` when the user cares about model or paper ecosystem velocity.
+- Keep `rss` enabled for Juya AI Daily and other curated AI digest feeds.
 - Add `github` when the user wants codebases worth cloning.
 - Add `twitter` only for users who explicitly value social discussion, conference chatter, or creator discovery.
 
@@ -95,6 +100,7 @@ After a successful run, expect some combination of:
 - `history/arxiv/<date>/`
 - `history/semanticscholar/<date>/`
 - `history/huggingface/<date>/`
+- `history/rss/<date>/`
 - `history/github/<date>/`
 - `history/twitter/<date>/`
 - `history/reports/<date>/report.md`

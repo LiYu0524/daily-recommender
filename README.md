@@ -139,7 +139,7 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 - 只发送一封**跨源报告邮件**
 - 不发送每个 source 的单独邮件
 - 把 `history/reports/` 作为 artifact 保留下来，方便下载查看
-- 默认源是 `github + arxiv + semanticscholar + huggingface`
+- 默认源是 `github + arxiv + semanticscholar + huggingface + rss`
 - 默认定时是 `UTC 00:00`，对应**北京时间 08:00**
 
 #### 必填 Secrets
@@ -162,7 +162,7 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 |------|------|------|
 | `IDEER_PROVIDER` | LLM provider | 默认 `openai` |
 | `IDEER_TEMPERATURE` | 采样温度 | 默认 `0.5` |
-| `IDEER_DAILY_SOURCES` | 选择要跑哪些源 | 默认 `github arxiv semanticscholar huggingface` |
+| `IDEER_DAILY_SOURCES` | 选择要跑哪些源 | 默认 `github arxiv semanticscholar huggingface rss` |
 | `IDEER_REPORT_TITLE` | 邮件标题 | 默认 `Daily Personal Briefing` |
 | `IDEER_RESEARCHER_PROFILE_TEXT` | 更完整的研究者画像 | 会用于报告生成 |
 | `IDEER_NUM_WORKERS` | 并发 worker 数 | 默认 `6`，GitHub Actions 上不建议盲目调太高 |
@@ -173,6 +173,7 @@ python main.py --sources arxiv semanticscholar huggingface --save --skip_source_
 |------|------|------|
 | `IDEER_ARXIV_CATEGORIES` | 你启用了 arXiv 时 | 例如 `cs.AI cs.CL cs.LG` |
 | `IDEER_ARXIV_MAX_ENTRIES` | 你启用了 arXiv 时 | 原始抓取数量上限 |
+| `IDEER_RSS_URLS` | 你启用了 RSS 时 | 默认 `https://imjuya.github.io/juya-ai-daily/rss.xml` |
 | `IDEER_ARXIV_MAX_PAPERS` | 你启用了 arXiv 时 | 最终推荐论文数量上限 |
 | `IDEER_GH_LANGUAGES` | 你启用了 GitHub 时 | 例如 `python typescript` 或 `all` |
 | `IDEER_GH_SINCE` | 你启用了 GitHub 时 | `daily` / `weekly` / `monthly` |
@@ -250,7 +251,7 @@ python3 skills/ideer-daily-paper-chatbot/scripts/install_internshannon_skill.py 
 Use ideer-daily-paper-chatbot. Run a chatbot-first dry run for today's paper digest from arxiv and huggingface, summarize and score the items yourself, save artifacts under history/, and do not send email.
 ```
 
-如果是第一次安装、还没有 `.env`，书安 Agent 会先进入配置向导。它会询问收件邮箱、研究方向、信息源和推送时间；Scholar/个人主页 URL、SMTP 发件配置和 ideas 生成可以跳过。默认信息源是 `arxiv + semanticscholar + huggingface`，默认推送偏好是 `Asia/Shanghai 13:00 daily`，但首次只保存偏好，不启用定时任务，也不自动发邮件。
+如果是第一次安装、还没有 `.env`，书安 Agent 会先进入配置向导。它会询问收件邮箱、研究方向、信息源和推送时间；Scholar/个人主页 URL、SMTP 发件配置和 ideas 生成可以跳过。默认信息源是 `arxiv + semanticscholar + huggingface + rss`，其中 RSS 默认订阅 `https://imjuya.github.io/juya-ai-daily/rss.xml`。默认推送偏好是 `Asia/Shanghai 13:00 daily`，但首次只保存偏好，不启用定时任务，也不自动发邮件。
 
 Agent 收集完答案后会调用：
 
@@ -303,6 +304,7 @@ iDeer skill 推荐默认时间是 `Asia/Shanghai 13:00`。第一次只做 dry ru
    ```bash
    .venv/bin/python -m pipeline.agent_bridge fetch arxiv --categories cs.AI cs.CL cs.LG --max 10
    .venv/bin/python -m pipeline.agent_bridge fetch huggingface --content_type papers --max 10
+   .venv/bin/python -m pipeline.agent_bridge fetch rss --max 10
    ```
 7. 由你自己完成去重、中文摘要、相关性评分、跨源报告和可选 ideas；不要调用 `python main.py` 或 `bash scripts/run_daily.sh`，除非用户明确要求测试旧的 API pipeline。
 8. 将结果保存到 `history/`，并汇报生成了哪些文件。除非用户明确要求发送且 SMTP 配置完整，否则不要发邮件。
@@ -316,6 +318,7 @@ ideer init                                     # 初始化工作目录
 ideer run --sources arxiv huggingface          # 运行推荐管线
 ideer run --sources arxiv --ideas --report     # 带 ideas + 跨源报告
 ideer fetch arxiv --categories cs.AI --max 10  # 单独抓取，输出 JSON
+ideer fetch rss --max 10                       # 抓取默认 RSS 订阅
 ideer clean --dry-run                          # 预览缓存占用
 ideer clean --before 2026-04-01               # 清理旧数据
 ideer serve                                    # 启动 Web UI
@@ -332,8 +335,9 @@ SMTP_PORT=465
 SMTP_SENDER=xxx
 SMTP_RECEIVER=xxx
 SMTP_PASSWORD=xxx
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=1
@@ -343,7 +347,7 @@ RESEARCHER_PROFILE=profiles/researcher_profile.md
 bash scripts/run_daily.sh
 ```
 
-默认模式已经是论文阅读优先：`arxiv + semanticscholar + huggingface`，并且会同时生成论文摘要、跨源 report 和 research ideas。
+默认模式已经是论文阅读优先并带 AI 日报补充：`arxiv + semanticscholar + huggingface + rss`，其中 RSS 默认订阅 Juya AI Daily，并且会同时生成论文摘要、跨源 report 和 research ideas。
 
 **两种定时方式：**
 
@@ -617,7 +621,7 @@ API pipeline 的典型流程是：
 Chatbot-first 的典型流程是：
 
 1. 先安装 `ideer-daily-paper-chatbot` 到书安 / A3S，或让 Codex 直接读取该 skill
-2. 让 Agent 抓 `arxiv semanticscholar huggingface` 的 raw items
+2. 让 Agent 抓 `arxiv semanticscholar huggingface rss` 的 raw items
 3. 让 Agent 自己完成总结、打分、报告和 ideas
 4. 将产物保存到 `history/`，只有在用户明确要求且 SMTP 完整时才发送邮件
 

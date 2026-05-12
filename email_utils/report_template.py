@@ -12,6 +12,10 @@ def _source_badge(source: str) -> tuple[str, str]:
         "github": ("GitHub", "#24292e"),
         "huggingface": ("HuggingFace", "#ff6f00"),
         "twitter": ("X/Twitter", "#1d9bf0"),
+        "rss": ("RSS", "#0e7490"),
+        "arxiv": ("arXiv", "#b31b1b"),
+        "semanticscholar": ("Semantic Scholar", "#1857b6"),
+        "pubmed": ("PubMed", "#2e7d32"),
     }
     return mapping.get(str(source or "").lower(), (str(source or "source"), "#6b7280"))
 

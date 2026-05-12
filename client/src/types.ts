@@ -1,4 +1,4 @@
-export type SourceName = "github" | "huggingface" | "twitter" | "arxiv" | "semanticscholar" | "pubmed";
+export type SourceName = "github" | "huggingface" | "twitter" | "arxiv" | "semanticscholar" | "pubmed" | "rss";
 export type AvatarId = "0" | "1" | "2" | "3";
 
 export type DeliveryMode = "source_emails" | "combined_report" | "both";
@@ -55,6 +55,8 @@ export interface ConfigData {
   arxiv_categories: string;
   arxiv_max_entries: number;
   arxiv_max_papers: number;
+  rss_urls: string;
+  rss_max_items: number;
 }
 
 export interface RunRequest {

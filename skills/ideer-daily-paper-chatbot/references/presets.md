@@ -7,8 +7,9 @@ Use these presets when the user wants the iDeer daily-paper experience without r
 Use when the user only wants today's paper digest in chat plus saved markdown.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=0
 SEND_REPORT_EMAIL=0
 GENERATE_IDEAS=0
@@ -25,8 +26,9 @@ Recommended behavior:
 Use when the user wants the digest plus a chatbot-written cross-source report.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=0
 GENERATE_IDEAS=0
@@ -43,8 +45,9 @@ Recommended behavior:
 Use when the user wants the digest plus chatbot-generated research ideas.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=0
 GENERATE_IDEAS=1
@@ -62,8 +65,9 @@ Recommended behavior:
 Use when the user wants chatbot-written content but still wants email delivery.
 
 ```env
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=0
@@ -81,5 +85,6 @@ Recommended behavior:
 
 - Prefer `arxiv + semanticscholar` for literature coverage
 - Keep `huggingface` when the user cares about paper ecosystem speed
+- Keep `rss` enabled for Juya AI Daily and other curated AI digest feeds
 - Add `github` for implementation-following workflows
 - Add `twitter` only when the user explicitly values discourse and credentials exist

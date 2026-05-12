@@ -75,6 +75,8 @@ DEFAULT_CONFIG = {
     "ss_max_papers": 30,
     "ss_year": "",
     "ss_api_key": "",
+    "rss_urls": "https://imjuya.github.io/juya-ai-daily/rss.xml",
+    "rss_max_items": 30,
     "schedule_enabled": False,
     "schedule_frequency": "daily",
     "schedule_time": "08:00",
@@ -496,6 +498,8 @@ class Config(BaseModel):
     ss_max_papers: int = 30
     ss_year: str = ""
     ss_api_key: str = ""
+    rss_urls: str = "https://imjuya.github.io/juya-ai-daily/rss.xml"
+    rss_max_items: int = 30
     schedule_enabled: bool = False
     schedule_frequency: str = "daily"
     schedule_time: str = "08:00"
@@ -579,6 +583,8 @@ SS_MAX_RESULTS={config.ss_max_results}
 SS_MAX_PAPERS={config.ss_max_papers}
 SS_YEAR={config.ss_year}
 SS_API_KEY={config.ss_api_key}
+RSS_URLS={config.rss_urls}
+RSS_MAX_ITEMS={config.rss_max_items}
 """
         (PROJECT_ROOT / ".env").write_text(env_content, encoding="utf-8")
 
@@ -802,6 +808,12 @@ async def run_daily_recommender(req: RunRequest, extra_args: list[str] | None = 
             ss_api_key = config.get("ss_api_key", "")
             if ss_api_key:
                 cmd.extend(["--ss_api_key", ss_api_key])
+
+        if "rss" in req.sources:
+            rss_urls = [url.strip() for url in re.split(r"[\s,]+", str(config.get("rss_urls", ""))) if url.strip()]
+            if rss_urls:
+                cmd.extend(["--rss_urls", *rss_urls])
+            cmd.extend(["--rss_max_items", str(config.get("rss_max_items", 30))])
 
         if extra_args:
             cmd.extend(extra_args)
@@ -1177,7 +1189,7 @@ def get_schedule_status():
 async def trigger_run_all_users():
     """Manually trigger per-user scoring for all registered users."""
     config = load_config_data()
-    sources = config.get("schedule_sources", []) or ["arxiv", "huggingface", "github", "semanticscholar", "pubmed"]
+    sources = config.get("schedule_sources", []) or ["arxiv", "huggingface", "github", "semanticscholar", "pubmed", "rss"]
     asyncio.create_task(_run_for_all_users(sources))
     return {"status": "started", "message": "Per-user scoring triggered in background"}
 

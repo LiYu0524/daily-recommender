@@ -23,10 +23,11 @@ else
   echo "No usable Python interpreter found." >&2
   exit 1
 fi
-SOURCES=(${DAILY_SOURCES:-arxiv semanticscholar huggingface})
+SOURCES=(${DAILY_SOURCES:-arxiv semanticscholar huggingface rss})
 ARXIV_CATEGORIES=(${ARXIV_CATEGORIES:-cs.AI cs.CL cs.LG})
 GH_LANGUAGES=(${GH_LANGUAGES:-all})
 HF_CONTENT_TYPES=(${HF_CONTENT_TYPES:-papers})
+RSS_URLS=(${RSS_URLS:-https://imjuya.github.io/juya-ai-daily/rss.xml})
 IDEA_ARGS=()
 REPORT_ARGS=()
 SS_QUERY_ARGS=()
@@ -98,6 +99,8 @@ fi
   --hf_content_type "${HF_CONTENT_TYPES[@]}" \
   --hf_max_papers "${HF_MAX_PAPERS:-30}" \
   --hf_max_models "${HF_MAX_MODELS:-15}" \
+  --rss_urls "${RSS_URLS[@]}" \
+  --rss_max_items "${RSS_MAX_ITEMS:-30}" \
   "${SOURCE_EMAIL_ARGS[@]}" \
   "${REPORT_ARGS[@]}" \
   "${IDEA_ARGS[@]}"

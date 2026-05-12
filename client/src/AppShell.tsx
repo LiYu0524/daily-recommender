@@ -11,7 +11,6 @@ import {
   testOpenAICompatibleApi,
   getStoredUser,
   loginWithEmail,
-  clearStoredUser,
   saveUserDescription,
 } from "./api";
 import {
@@ -70,6 +69,7 @@ import iconGitHub from "./assets/icon_github.svg";
 import iconGitHubWhite from "./assets/icon_github.white.svg";
 import iconHF from "./assets/icon_hf.svg";
 import iconIDeer from "./assets/icon_ideer.svg";
+import iconRSS from "./assets/icon_rss.svg";
 import iconX from "./assets/icon_x.svg";
 import iconXBlack from "./assets/icon_x.black.svg";
 import "./desktop.css";
@@ -104,10 +104,11 @@ const DEFAULT_CONFIG: ConfigData = {
   description: "", researcher_profile: "", x_rapidapi_key: "",
   x_rapidapi_host: "twitter-api45.p.rapidapi.com", x_accounts: "",
   arxiv_categories: "cs.AI", arxiv_max_entries: 100, arxiv_max_papers: 60,
+  rss_urls: "https://imjuya.github.io/juya-ai-daily/rss.xml", rss_max_items: 30,
 };
 
 const DEFAULT_RUN_FORM: RunRequest = {
-  sources: ["github", "huggingface", "arxiv"], generate_report: true, generate_ideas: false,
+  sources: ["github", "huggingface", "arxiv", "rss"], generate_report: true, generate_ideas: false,
   save: true, receiver: "", description: "", researcher_profile: "", scholar_url: "",
   x_accounts_input: "", delivery_mode: "combined_report",
 };
@@ -139,6 +140,7 @@ const SOURCES = [
   { key: "huggingface", label: "HuggingFace", description: "论文与模型动态", iconLight: iconHF, iconDark: iconHF, iconActive: iconHF },
   { key: "twitter", label: "X", description: "账号时间线和圈层信号", iconLight: iconXBlack, iconDark: iconX, iconActive: iconX },
   { key: "arxiv", label: "arXiv", description: "新论文抓取与筛选", iconLight: iconArxiv, iconDark: iconArxiv, iconActive: iconArxiv },
+  { key: "rss", label: "RSS", description: "Juya AI Daily 等订阅", iconLight: iconRSS, iconDark: iconRSS, iconActive: iconRSS },
   { key: "pubmed", label: "PubMed", description: "生物医学文献", iconLight: iconPubMed, iconDark: iconPubMed, iconActive: iconPubMed },
   { key: "semanticscholar", label: "Semantic Scholar", description: "跨学科 2 亿+ 论文", iconLight: iconSS, iconDark: iconSS, iconActive: iconSS },
 ] satisfies Array<{ key: SourceName; label: string; description: string; iconLight: string; iconDark: string; iconActive: string }>;

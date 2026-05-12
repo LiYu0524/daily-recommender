@@ -157,7 +157,7 @@ def cache_clean(targets: list[str], before: str | None = None, dry_run: bool = F
     if clean_all or "eval" in target_set:
         dirs_to_clean.append(("eval cache", os.path.join(base_dir, "state", "eval_cache")))
     if clean_all or "history" in target_set:
-        for source in ["arxiv", "huggingface", "github", "semanticscholar", "twitter"]:
+        for source in ["arxiv", "huggingface", "github", "semanticscholar", "twitter", "pubmed", "rss"]:
             dirs_to_clean.append((f"history/{source}", os.path.join(base_dir, "history", source)))
     if clean_all or "ideas" in target_set:
         dirs_to_clean.append(("history/ideas", os.path.join(base_dir, "history", "ideas")))
@@ -228,13 +228,14 @@ def main():
     # --- fetch: run a fetcher and print JSON ---
     p_fetch = sub.add_parser("fetch", help="Run a fetcher and print JSON to stdout")
     p_fetch.add_argument("source", choices=["arxiv", "huggingface", "github",
-                                             "semanticscholar", "twitter", "pubmed"])
+                                             "semanticscholar", "twitter", "pubmed", "rss"])
     p_fetch.add_argument("--categories", nargs="+", default=["cs.AI"])
     p_fetch.add_argument("--max", type=int, default=30)
     p_fetch.add_argument("--queries", nargs="+", default=[])
     p_fetch.add_argument("--language", type=str, default=None)
     p_fetch.add_argument("--since", type=str, default="daily")
     p_fetch.add_argument("--content_type", nargs="+", default=["papers"])
+    p_fetch.add_argument("--rss_urls", "--urls", nargs="+", default=[])
 
     # --- save-items: save scored items from stdin JSON ---
     p_save = sub.add_parser("save-items", help="Save scored items (JSON from stdin)")
@@ -322,6 +323,10 @@ def _run_fetcher(args) -> list:
         from fetchers.pubmed_fetcher import fetch_papers_for_queries
         queries = args.queries or ["biomedical"]
         return fetch_papers_for_queries(queries, max_results_per_query=args.max, days=7)
+
+    elif args.source == "rss":
+        from fetchers.rss_fetcher import fetch_rss_feeds
+        return fetch_rss_feeds(args.rss_urls, max_items=args.max)
 
     elif args.source == "twitter":
         print("Twitter requires API key — use fetchers/twitter_fetcher.py directly",

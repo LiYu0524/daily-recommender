@@ -120,8 +120,9 @@ SMTP_PORT=465
 SMTP_SENDER=xxx
 SMTP_RECEIVER=xxx
 SMTP_PASSWORD=xxx
-DAILY_SOURCES="arxiv semanticscholar huggingface"
+DAILY_SOURCES="arxiv semanticscholar huggingface rss"
 HF_CONTENT_TYPES="papers"
+RSS_URLS="https://imjuya.github.io/juya-ai-daily/rss.xml"
 GENERATE_REPORT=1
 SEND_REPORT_EMAIL=1
 GENERATE_IDEAS=1
@@ -131,7 +132,7 @@ RESEARCHER_PROFILE=profiles/researcher_profile.md
 bash scripts/run_daily.sh
 ```
 
-The default mode is already **paper-first**: `arxiv + semanticscholar + huggingface`, with paper summaries, a cross-source report, and research ideas enabled by default.
+The default mode is already **paper-first with curated AI digest coverage**: `arxiv + semanticscholar + huggingface + rss`, with Juya AI Daily as the default RSS feed plus paper summaries, a cross-source report, and research ideas enabled by default.
 
 **Two scheduling options:**
 

@@ -61,7 +61,7 @@ def main() -> int:
     temperature = read_env("IDEER_TEMPERATURE", "0.5")
     daily_sources = read_env("INPUT_SOURCES") or read_env(
         "IDEER_DAILY_SOURCES",
-        "github arxiv semanticscholar huggingface",
+        "github arxiv semanticscholar huggingface rss",
     )
     report_title = read_env("INPUT_REPORT_TITLE") or read_env(
         "IDEER_REPORT_TITLE",
@@ -117,6 +117,8 @@ def main() -> int:
         "HF_CONTENT_TYPES": read_env("IDEER_HF_CONTENT_TYPES", "papers"),
         "HF_MAX_PAPERS": read_env("IDEER_HF_MAX_PAPERS", "30"),
         "HF_MAX_MODELS": read_env("IDEER_HF_MAX_MODELS", "15"),
+        "RSS_URLS": read_env("IDEER_RSS_URLS", "https://imjuya.github.io/juya-ai-daily/rss.xml"),
+        "RSS_MAX_ITEMS": read_env("IDEER_RSS_MAX_ITEMS", "30"),
         "SS_QUERIES": read_env("IDEER_SS_QUERIES", ""),
         "SS_MAX_RESULTS": read_env("IDEER_SS_MAX_RESULTS", "60"),
         "SS_MAX_PAPERS": read_env("IDEER_SS_MAX_PAPERS", "30"),

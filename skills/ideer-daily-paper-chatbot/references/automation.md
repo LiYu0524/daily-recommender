@@ -30,6 +30,8 @@ python3 skills/ideer-daily-paper-chatbot/scripts/setup_chatbot_config.py
 
 Pass the collected answers as JSON on stdin.
 
+Default chatbot-first sources are `arxiv semanticscholar huggingface rss`; RSS defaults to `https://imjuya.github.io/juya-ai-daily/rss.xml`.
+
 The setup helper saves the schedule preference with `schedule_enabled=false`. Do not create a recurring task until a dry run has produced local artifacts and the user confirms automation.
 
 ## InternShannon / 书安 setup command
