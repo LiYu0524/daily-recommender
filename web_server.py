@@ -26,6 +26,17 @@ from pydantic import BaseModel
 
 from fetchers.profile_fetcher import build_profile_text_from_urls
 
+# Fix missing MIME types on Windows
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
+mimetypes.add_type("image/svg+xml", ".svg")
+mimetypes.add_type("image/png", ".png")
+mimetypes.add_type("image/jpeg", ".jpg")
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("font/woff", ".woff")
+mimetypes.add_type("font/woff2", ".woff2")
+
 
 # 项目根目录
 PROJECT_ROOT = Path(__file__).parent.absolute()
@@ -999,23 +1010,52 @@ def get_file(source: str, date: str, filename: str):
 
 # ============== Static Files ==============
 
+WEBUI_DIST = PROJECT_ROOT / "webui" / "dist"
+WEBUI_INDEX = WEBUI_DIST / "index.html"
+
 @app.get("/health")
 def health_check():
     return {"status": "ok", "service": "Daily Recommender"}
 
 
+@app.get("/assets/{path:path}")
+def webui_assets(path: str):
+    if WEBUI_DIST.exists():
+        file = WEBUI_DIST / "assets" / path
+        if file.is_file():
+            media_type, _ = mimetypes.guess_type(str(file))
+            return FileResponse(file, media_type=media_type or "application/octet-stream")
+    return JSONResponse({"error": "Not found"}, status_code=404)
+
+
+@app.get("/icons/{path:path}")
+def webui_icons(path: str):
+    if WEBUI_DIST.exists():
+        file = WEBUI_DIST / "icons" / path
+        if file.is_file():
+            media_type, _ = mimetypes.guess_type(str(file))
+            return FileResponse(file, media_type=media_type or "application/octet-stream")
+    return JSONResponse({"error": "Not found"}, status_code=404)
+
+
 @app.get("/")
 def root():
+    if WEBUI_INDEX.exists():
+        return FileResponse(WEBUI_INDEX)
     return FileResponse(PUBLIC_UI_FILE)
 
 
 @app.get("/public")
 def public_web_ui():
+    if WEBUI_INDEX.exists():
+        return FileResponse(WEBUI_INDEX)
     return FileResponse(PUBLIC_UI_FILE)
 
 
 @app.get("/admin")
 def admin_web_ui():
+    if WEBUI_INDEX.exists():
+        return FileResponse(WEBUI_INDEX)
     return FileResponse(ADMIN_UI_FILE)
 
 
@@ -1045,6 +1085,14 @@ def desktop_client_asset(asset_path: str):
 @app.get("/web-ui.html")
 def legacy_admin_web_ui():
     return FileResponse(ADMIN_UI_FILE)
+
+
+# SPA fallback: serve React index.html for unrecognized routes when webui dist exists
+@app.get("/{path:path}")
+def spa_fallback(path: str):
+    if WEBUI_INDEX.exists():
+        return FileResponse(WEBUI_INDEX)
+    return JSONResponse({"error": "Not found"}, status_code=404)
 
 
 # ============== Scheduler ==============
